@@ -1,9 +1,6 @@
 // 1. 載入環境變數設定 (.env)
 require('dotenv').config();
 
-const dns = require('dns');
-dns.setServers(['8.8.8.8', '8.8.4.4']); // 強制使用 Google DNS 解析 MongoDB 網址
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -16,14 +13,50 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 設定靜態檔案資料夾 (對應 public 目錄裡的前端頁面)
+// 設定靜態檔案資料夾
 app.use(express.static(path.join(__dirname, 'public')));
 
 // -------------------------------------------------------------------
-// 3. 資料庫 Schema 定義
+// 3. MongoDB 資料庫連線優化 (適應 Vercel Serverless 環境)
+// -------------------------------------------------------------------
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://louiz520_db_user:O2XQ61mjKHLMs3qg@smile.eudkfpx.mongodb.net:27017/warehouse_db?ssl=true&authSource=admin&appName=Smile';
+
+let isConnected = false;
+
+async function connectToDatabase() {
+  if (isConnected && mongoose.connection.readyState === 1) {
+    return;
+  }
+  try {
+    await mongoose.connect(MONGODB_URI, {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 5000
+    });
+    isConnected = true;
+    console.log('🔗 已成功連接至 MongoDB Atlas 雲端資料庫！');
+  } catch (err) {
+    console.error('❌ MongoDB 資料庫連線失敗:', err.message);
+    throw err;
+  }
+}
+
+// 每次收到請求前確保資料庫連線已建立
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    try {
+      await connectToDatabase();
+    } catch (err) {
+      return res.status(500).json({ success: false, message: '資料庫連線失敗，請檢查 MongoDB Atlas 設定', error: err.message });
+    }
+  }
+  next();
+});
+
+// -------------------------------------------------------------------
+// 4. 資料庫 Schema 定義
 // -------------------------------------------------------------------
 
-// 3.1 進貨紀錄 Schema (對應 index.html 儀表板的需求)
+// 進貨紀錄 Schema
 const recordSchema = new mongoose.Schema({
   time: { type: String, default: () => new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) },
   supplier: { type: String, default: '未指定廠商' },
@@ -34,36 +67,13 @@ const recordSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-const Record = mongoose.model('Record', recordSchema);
-
-// 3.2 使用者 Schema
-const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: { type: String, enum: ['developer', 'manager', 'staff'], default: 'staff' },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const User = mongoose.model('User', userSchema);
-
-// 3.3 庫存 Schema
-const inventorySchema = new mongoose.Schema({
-  itemCode: { type: String, required: true, unique: true },
-  itemName: { type: String, required: true },
-  category: { type: String, required: true },
-  quantity: { type: Number, required: true, default: 0 },
-  unitPrice: { type: Number, required: true, default: 0 },
-  location: { type: String, default: '未分配' },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-const Inventory = mongoose.model('Inventory', inventorySchema);
+const Record = mongoose.models.Record || mongoose.model('Record', recordSchema);
 
 // -------------------------------------------------------------------
-// 4. API 路由 (API Routes)
+// 5. API 路由 (API Routes)
 // -------------------------------------------------------------------
 
-// 4.1 取得進貨紀錄 API (供 index.html 使用)
+// 5.1 取得進貨紀錄 API (儀表板使用)
 app.get('/api/records', async (req, res) => {
   try {
     const records = await Record.find().sort({ createdAt: -1 }).limit(20);
@@ -73,7 +83,7 @@ app.get('/api/records', async (req, res) => {
   }
 });
 
-// 4.2 新增進貨紀錄 API (供 scan.html 司機端提交使用)
+// 5.2 新增進貨紀錄 API (司機打卡端使用)
 app.post('/api/records', async (req, res) => {
   try {
     const newRecord = new Record(req.body);
@@ -84,45 +94,13 @@ app.post('/api/records', async (req, res) => {
   }
 });
 
-// 4.3 使用者登入 API
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const user = await User.findOne({ username, password });
-    if (!user) {
-      return res.status(401).json({ success: false, message: '帳號或密碼錯誤' });
-    }
-    res.json({ success: true, message: '登入成功', user: { username: user.username, role: user.role } });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '伺服器內部錯誤', error: error.message });
-  }
-});
-
-// 4.4 庫存管理相關 API
-app.get('/api/inventory', async (req, res) => {
-  try {
-    const items = await Inventory.find().sort({ updatedAt: -1 });
-    res.json({ success: true, data: items });
-  } catch (error) {
-    res.status(500).json({ success: false, message: '無法取得庫存資料', error: error.message });
-  }
-});
-
-// SPA 退回機制
+// SPA 退回機制 (找不到路徑時回傳 index.html)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// -------------------------------------------------------------------
-// 5. 資料庫連線與啟動
-// -------------------------------------------------------------------
+// 本地開發環境啟動伺服器
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://louiz520_db_user:O2XQ61mjKHLMs3qg@smile.eudkfpx.mongodb.net:27017/warehouse_db?ssl=true&authSource=admin&appName=Smile';
-
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('🔗 已成功連接至 MongoDB Atlas 雲端資料庫！'))
-  .catch(err => console.error('❌ MongoDB 資料庫連線失敗:', err.message));
-
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   app.listen(PORT, () => console.log(`🚀 本地伺服器啟動於 http://localhost:${PORT}`));
 }
