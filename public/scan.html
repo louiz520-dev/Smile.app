@@ -561,10 +561,13 @@
 
       statusMsg.innerHTML = "⏳ 資料寫入中...";
 
+      // 已設定為您的專屬 Google Apps Script 網址
+      const gasUrl = 'https://script.google.com/macros/s/AKfycbxnsJ34G9EV0dlNMsQBezIKaHQHnICvUI-eR_wRwYGfFb1HPDT-Qck5ElPxF8hCf9iEHw/exec';
+
       try {
-        const response = await fetch('/api/scan', {
+        const response = await fetch(gasUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             driver: driverName,
             barcode: barcode,
@@ -574,15 +577,15 @@
         });
 
         const result = await response.json();
-        if (response.ok) {
+        if (result.status === 'success' || result.result === 'success') {
           const summaryStr = pallets.map(p => `${p.name}x${p.count}`).join(', ');
           statusMsg.innerHTML = `🎉 <span class="gold-text">${barcode}</span> 送出成功！[${summaryStr}]`;
           if (navigator.vibrate) navigator.vibrate(100);
         } else {
-          statusMsg.innerText = `❌ 上傳失敗：${result.error || '資料庫錯誤'}`;
+          statusMsg.innerText = `❌ 上傳失敗：${result.message || result.error || '資料庫寫入錯誤'}`;
         }
       } catch (error) {
-        statusMsg.innerText = "❌ 伺服器連線異常";
+        statusMsg.innerText = "❌ 伺服器連線異常，請檢查網路狀態";
       }
     }
   </script>
