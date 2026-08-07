@@ -1,133 +1,209 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>先馳微笑倉儲 - 後台管理儀表板</title>
-    <link rel="manifest" href="/manifest.json">
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>倉儲棧板管理與動態庫存儀表板</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #FFF; margin: 0; padding: 15px; }
+    h1, h2 { color: #D4AF37; margin-top: 0; font-size: 16px; margin-bottom: 10px; }
+    
+    .top-bar {
+      background: #1E1E1E; border: 1px solid #D4AF37; padding: 12px 18px;
+      border-radius: 10px; margin-bottom: 15px; display: flex; flex-wrap: wrap;
+      justify-content: space-between; align-items: center; gap: 10px;
+    }
+    .top-left { display: flex; align-items: center; gap: 12px; }
+    .driver-generator { display: flex; align-items: center; gap: 6px; background: #2A2A2A; padding: 6px 10px; border-radius: 8px; border: 1px solid #444; }
+    .driver-generator input { background: #121212; border: 1px solid #555; color: #FFF; padding: 6px; border-radius: 6px; font-size: 13px; width: 100px; }
+    
+    .btn {
+      padding: 8px 14px; font-size: 13px; font-weight: bold; border: none;
+      border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; transition: all 0.2s;
+    }
+    .btn-gold { background: linear-gradient(135deg, #D4AF37 0%, #F1D279 100%); color: #121212; }
+    .btn-gold:hover { opacity: 0.9; }
+    .btn-outline { background: transparent; color: #D4AF37; border: 1px solid #D4AF37; }
+
+    /* 圖表網格列 */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-bottom: 15px; }
+    
+    /* 圖表卡片 */
+    .card { background: #1E1E1E; border: 1px solid #333; padding: 12px 15px; border-radius: 10px; box-sizing: border-box; }
+    .chart-card { height: 260px; display: flex; flex-direction: column; }
+    
+    /* 強制圖表容器縮小固定比例 */
+    .chart-container { flex: 1; position: relative; width: 100%; height: 200px; }
+
+    /* 表格樣式 */
+    table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 13px; }
+    th, td { border: 1px solid #444; padding: 6px 8px; text-align: left; }
+    th { background-color: #2A2A2A; color: #D4AF37; }
+    .badge { background: #D4AF37; color: #121212; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; margin-right: 4px; display: inline-block; }
+  </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8">
+<body>
 
-    <div class="max-w-6xl mx-auto space-y-6">
-
-        <!-- 頂部頁首區塊 -->
-        <header class="flex justify-between items-center bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
-            <div>
-                <h1 class="text-2xl md:text-3xl font-bold text-amber-400 flex items-center gap-2">
-                    🏢 先馳微笑倉儲管理儀表板
-                </h1>
-                <p class="text-xs md:text-sm text-slate-400 mt-1">即時車輛進貨、司機打卡與棧板統計總覽</p>
-            </div>
-            <a href="/scan.html" target="_blank" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2.5 rounded-xl transition text-sm flex items-center gap-1 shadow-md">
-                📱 前往司機作業端 ➔
-            </a>
-        </header>
-
-        <!-- 核心表格區塊 -->
-        <main class="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
-            <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-800/90">
-                <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-                    <span>🚛</span> 即時司機車輛與貨物進貨動態
-                </h2>
-                <button onclick="loadDashboardRecords()" class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
-                    🔄 立即重新整理
-                </button>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm text-slate-300">
-                    <thead class="bg-slate-900/90 text-xs uppercase text-slate-400 border-b border-slate-700">
-                        <tr>
-                            <th class="px-6 py-4 font-semibold">進貨時間</th>
-                            <th class="px-6 py-4 font-semibold">廠商名稱</th>
-                            <th class="px-6 py-4 font-semibold">司機姓名</th>
-                            <th class="px-6 py-4 font-semibold">車牌號碼</th>
-                            <th class="px-6 py-4 font-semibold text-center">棧板數量</th>
-                            <th class="px-6 py-4 font-semibold text-center">狀態</th>
-                        </tr>
-                    </thead>
-                    <tbody id="dashboardRecordsTable" class="divide-y divide-slate-700/60">
-                        <tr>
-                            <td colspan="6" class="px-6 py-8 text-center text-slate-400 text-xs">
-                                正在讀取進貨動態...
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </main>
-
+  <div class="top-bar">
+    <div class="top-left">
+      <h1 style="margin:0; font-size: 18px;">🚚 倉儲管理儀表板</h1>
+      <a href="/scan.html" class="btn btn-gold" target="_blank">📱 前往司機端 ↗</a>
     </div>
 
-    <script>
-        async function loadDashboardRecords() {
-            const tableBody = document.getElementById('dashboardRecordsTable');
-            if (!tableBody) return;
+    <div class="driver-generator">
+      <span style="font-size: 13px; color: #AAA;">司機：</span>
+      <input type="text" id="driver-input" placeholder="例如：王小明">
+      <button class="btn btn-outline" onclick="openDriverPage()" style="padding: 5px 10px; font-size: 12px;">開啟</button>
+      <button class="btn btn-gold" onclick="copyDriverLink()" style="padding: 5px 10px; font-size: 12px;">複製連結</button>
+    </div>
+  </div>
 
-            try {
-                const response = await fetch('/api/records');
-                if (!response.ok) {
-                    throw new Error(`伺服器錯誤 (HTTP ${response.status})`);
-                }
+  <!-- 📊 圖表區塊 -->
+  <div class="grid">
+    <div class="card chart-card">
+      <h2>📊 今日個別棧板進出數量總覽 (板)</h2>
+      <div class="chart-container">
+        <canvas id="dailyChart"></canvas>
+      </div>
+    </div>
+    <div class="card chart-card">
+      <h2>📦 倉庫目前動態棧板庫存比例</h2>
+      <div class="chart-container">
+        <canvas id="stockChart"></canvas>
+      </div>
+    </div>
+  </div>
 
-                const data = await response.json();
+  <!-- 📋 當日作業紀錄與數量明細表 -->
+  <div class="card">
+    <h2>📋 當日單次作業紀錄與數量明細</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>時間</th>
+          <th>司機</th>
+          <th>條碼/單號</th>
+          <th>棧板明細 (個別數量)</th>
+          <th>貨物動態</th>
+        </tr>
+      </thead>
+      <tbody id="today-table">
+        <tr><td colspan="5" style="text-align:center; color:#888;">載入中...</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-                // 防呆判斷：確保回應資料是陣列
-                if (!Array.isArray(data) || data.length === 0) {
-                    tableBody.innerHTML = `
-                        <tr>
-                            <td colspan="6" class="px-6 py-8 text-center text-slate-400 text-sm">
-                                目前尚無任何進貨紀錄
-                            </td>
-                        </tr>`;
-                    return;
-                }
+  <script>
+    let dailyChart = null;
+    let stockChart = null;
 
-                const recentData = data.slice(-15).reverse();
+    function getDriverUrl() {
+      const name = document.getElementById('driver-input').value.trim() || '司機';
+      return `${window.location.origin}/scan.html?driver=${encodeURIComponent(name)}`;
+    }
 
-                tableBody.innerHTML = recentData.map(item => `
-                    <tr class="hover:bg-slate-700/40 transition">
-                        <td class="px-6 py-4 font-mono text-slate-400 whitespace-nowrap">
-                            ⏱️ ${item.time || '剛剛'}
-                        </td>
-                        <td class="px-6 py-4 font-bold text-amber-400 whitespace-nowrap">
-                            🏢 ${item.supplier || '未指定廠商'}
-                        </td>
-                        <td class="px-6 py-4 text-white font-medium whitespace-nowrap">
-                            👤 ${item.driverName || '未登記'}
-                        </td>
-                        <td class="px-6 py-4 font-mono text-slate-200 whitespace-nowrap">
-                            🚛 ${item.plateNumber || '未紀錄'}
-                        </td>
-                        <td class="px-6 py-4 text-center whitespace-nowrap">
-                            <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full font-bold">
-                                📦 ${item.palletCount || 1} 棧
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 text-center whitespace-nowrap">
-                            <span class="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full text-xs font-semibold">
-                                ${item.status || '已進貨'}
-                            </span>
-                        </td>
-                    </tr>
-                `).join('');
+    function openDriverPage() { window.open(getDriverUrl(), '_blank'); }
 
-            } catch (error) {
-                console.error('資料讀取失敗:', error);
-                tableBody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="px-6 py-6 text-center text-rose-400 text-sm">
-                            ⚠️ 連線失敗，請確定伺服器與資料庫連線正常 (${error.message})
-                        </td>
-                    </tr>`;
-            }
+    function copyDriverLink() {
+      const url = getDriverUrl();
+      navigator.clipboard.writeText(url).then(() => { alert(`✅ 已複製司機專屬連結：\n${url}`); }).catch(() => { prompt("請複製連結：", url); });
+    }
+
+    async function fetchAnalytics() {
+      try {
+        const res = await fetch('/api/analytics');
+        const data = await res.json();
+
+        // 1. 渲染今日明細表格
+        const tbody = document.getElementById('today-table');
+        tbody.innerHTML = '';
+        if (!data.todayRecords || data.todayRecords.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">今日尚無作業紀錄</td></tr>';
+        } else {
+          data.todayRecords.forEach(r => {
+            const pallets = Array.isArray(r.pallets) ? r.pallets : [];
+            const palletsHtml = pallets.map(p => {
+              if (typeof p === 'object' && p.name) {
+                return `<span class="badge">${p.name} x${p.count}</span>`;
+              }
+              return `<span class="badge">${p}</span>`;
+            }).join(' ');
+
+            const timeStr = new Date(r.created_at).toLocaleTimeString();
+            tbody.innerHTML += `
+              <tr>
+                <td>${timeStr}</td>
+                <td>${r.driver}</td>
+                <td>${r.barcode}</td>
+                <td>${palletsHtml || '無棧板資訊'}</td>
+                <td>${r.status}</td>
+              </tr>
+            `;
+          });
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            loadDashboardRecords();
-            setInterval(loadDashboardRecords, 5000);
+        // 2. 渲染今日進出數量長條圖
+        const palletKeys = Array.from(new Set([...Object.keys(data.dailyInMap || {}), ...Object.keys(data.dailyOutMap || {})]));
+        const inCounts = palletKeys.map(k => data.dailyInMap[k] || 0);
+        const outCounts = palletKeys.map(k => data.dailyOutMap[k] || 0);
+
+        if (dailyChart) dailyChart.destroy();
+        dailyChart = new Chart(document.getElementById('dailyChart'), {
+          type: 'bar',
+          data: {
+            labels: palletKeys.length ? palletKeys : ['無資料'],
+            datasets: [
+              { label: '進倉 (+)', data: inCounts.length ? inCounts : [0], backgroundColor: '#4CAF50' },
+              { label: '出倉 (-)', data: outCounts.length ? outCounts : [0], backgroundColor: '#FF5252' }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: '#FFF', font: { size: 11 } }, position: 'top' }
+            },
+            scales: {
+              x: { ticks: { color: '#AAA', font: { size: 10 } } },
+              y: { ticks: { color: '#AAA', font: { size: 10 } } }
+            }
+          }
         });
-    </script>
+
+        // 3. 渲染庫存圓餅圖
+        const stockKeys = Object.keys(data.stockMap || {});
+        const stockValues = stockKeys.map(k => data.stockMap[k]);
+
+        if (stockChart) stockChart.destroy();
+        stockChart = new Chart(document.getElementById('stockChart'), {
+          type: 'pie',
+          data: {
+            labels: stockKeys.length ? stockKeys : ['暫無庫存'],
+            datasets: [{
+              data: stockValues.length ? stockValues : [1],
+              backgroundColor: ['#D4AF37', '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#E91E63', '#607D8B', '#795548']
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'right',
+                labels: { color: '#FFF', font: { size: 10 }, boxWidth: 12 }
+              }
+            }
+          }
+        });
+
+      } catch (err) {
+        console.error("載入失敗:", err);
+      }
+    }
+
+    fetchAnalytics();
+    setInterval(fetchAnalytics, 10000);
+  </script>
 </body>
 </html>

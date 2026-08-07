@@ -1,87 +1,88 @@
-require('dotenv').config();
-
 const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const path = require('path');
-
 const app = express();
 
-app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
-// 使用標準 MongoDB Atlas SRV 連線字串，確保 Vercel 雲端相容性
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://louiz520_db_user:O2XQ61mjKHLMs3qg@smile.eudkfpx.mongodb.net/warehouse_db?retryWrites=true&w=majority';
+// 記憶體儲存打卡紀錄 (生產環境可替換為資料庫)
+let records = [];
 
-// Serverless 連線快取
-let cachedDb = null;
-
-async function connectToDatabase() {
-  if (cachedDb && mongoose.connection.readyState === 1) {
-    return cachedDb;
-  }
+// 1. 司機端提交 API (POST /api/scan)
+app.post('/api/scan', (req, res) => {
+  const { driver, barcode, status, pallets } = req.body;
   
-  // 建立新連線
-  mongoose.set('strictQuery', false);
-  const db = await mongoose.connect(MONGODB_URI, {
-    serverSelectionTimeoutMS: 5000
+  if (!barcode || !pallets || !Array.isArray(pallets) || pallets.length === 0) {
+    return res.status(400).json({ error: '缺少條碼或棧板資訊' });
+  }
+
+  const newRecord = {
+    id: Date.now(),
+    driver: driver || '測試司機',
+    barcode: barcode,
+    status: status || '卸貨/入倉',
+    pallets: pallets,
+    created_at: new Date().toISOString()
+  };
+
+  records.unshift(newRecord);
+  res.status(200).json({ success: true, message: '記錄寫入成功', data: newRecord });
+});
+
+// 2. 後台動態分析 API (GET /api/analytics)
+app.get('/api/analytics', (req, res) => {
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // 篩選當日紀錄
+  const todayRecords = records.filter(r => r.created_at.startsWith(todayStr));
+
+  const dailyInMap = {};
+  const dailyOutMap = {};
+  const stockMap = {};
+
+  // 運算全歷史紀錄的動態庫存與當日進出量
+  records.forEach(r => {
+    const isToday = r.created_at.startsWith(todayStr);
+    const isOut = r.status.includes('出倉') || r.status.includes('提貨');
+
+    (r.pallets || []).forEach(p => {
+      const pName = typeof p === 'object' && p.name ? p.name : p;
+      const pCount = typeof p === 'object' && p.count ? parseInt(p.count) : 1;
+
+      // 運算總庫存
+      if (!stockMap[pName]) stockMap[pName] = 0;
+      if (isOut) {
+        stockMap[pName] = Math.max(0, stockMap[pName] - pCount);
+      } else {
+        stockMap[pName] += pCount;
+      }
+
+      // 運算當日進出量
+      if (isToday) {
+        if (isOut) {
+          dailyOutMap[pName] = (dailyOutMap[pName] || 0) + pCount;
+        } else {
+          dailyInMap[pName] = (dailyInMap[pName] || 0) + pCount;
+        }
+      }
+    });
   });
-  cachedDb = db;
-  return db;
-}
 
-// -------------------------------------------------------------------
-// 資料庫 Schema 定義
-// -------------------------------------------------------------------
-const recordSchema = new mongoose.Schema({
-  time: { type: String, default: () => new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) },
-  supplier: { type: String, default: '未指定廠商' },
-  driverName: { type: String, default: '未登記' },
-  plateNumber: { type: String, default: '未紀錄' },
-  palletCount: { type: Number, default: 1 },
-  status: { type: String, default: '已進貨' },
-  createdAt: { type: Date, default: Date.now }
+  res.status(200).json({
+    todayRecords,
+    dailyInMap,
+    dailyOutMap,
+    stockMap
+  });
 });
 
-const Record = mongoose.models.Record || mongoose.model('Record', recordSchema);
-
-// -------------------------------------------------------------------
-// API 路由
-// -------------------------------------------------------------------
-app.get('/api/records', async (req, res) => {
-  try {
-    await connectToDatabase();
-    const records = await Record.find().sort({ createdAt: -1 }).limit(20);
-    res.json(records);
-  } catch (error) {
-    console.error('API /api/records 錯誤:', error);
-    // 連線失敗時回傳空陣列，避免前端 JavaScript 崩潰
-    res.status(500).json([]);
-  }
+// 3. 備用讀取全紀錄 API
+app.get('/api/records', (req, res) => {
+  res.status(200).json(records);
 });
 
-app.post('/api/records', async (req, res) => {
-  try {
-    await connectToDatabase();
-    const newRecord = new Record(req.body);
-    await newRecord.save();
-    res.status(201).json({ success: true, message: '紀錄新增成功', data: newRecord });
-  } catch (error) {
-    res.status(400).json({ success: false, message: '新增紀錄失敗', error: error.message });
-  }
-});
-
-// SPA 退回機制
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// 本地開發測試啟動
 const PORT = process.env.PORT || 3000;
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  app.listen(PORT, () => console.log(`🚀 本地伺服器啟動於 http://localhost:${PORT}`));
-}
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 module.exports = app;
