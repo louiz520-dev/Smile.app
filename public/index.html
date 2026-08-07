@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>先馳微笑倉儲 - 後台管理儀表板</title>
-    <!-- 引入 PWA 設定與 Tailwind CSS 樣式 -->
     <link rel="manifest" href="/manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -25,10 +24,8 @@
             </a>
         </header>
 
-        <!-- 核心表格區塊：顯示司機、車輛、廠商與棧板動態 -->
+        <!-- 核心表格區塊 -->
         <main class="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
-            
-            <!-- 表頭區 -->
             <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-800/90">
                 <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
                     <span>🚛</span> 即時司機車輛與貨物進貨動態
@@ -38,7 +35,6 @@
                 </button>
             </div>
 
-            <!-- 響應式表格 -->
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm text-slate-300">
                     <thead class="bg-slate-900/90 text-xs uppercase text-slate-400 border-b border-slate-700">
@@ -52,7 +48,6 @@
                         </tr>
                     </thead>
                     <tbody id="dashboardRecordsTable" class="divide-y divide-slate-700/60">
-                        <!-- 資料載入中的預設文字 -->
                         <tr>
                             <td colspan="6" class="px-6 py-8 text-center text-slate-400 text-xs">
                                 正在讀取進貨動態...
@@ -61,23 +56,25 @@
                     </tbody>
                 </table>
             </div>
-
         </main>
 
     </div>
 
-    <!-- 自動抓取資料並渲染表格的腳本 -->
     <script>
         async function loadDashboardRecords() {
             const tableBody = document.getElementById('dashboardRecordsTable');
             if (!tableBody) return;
 
             try {
-                // 1. 向後端取得進貨資料
                 const response = await fetch('/api/records');
+                if (!response.ok) {
+                    throw new Error(`伺服器錯誤 (HTTP ${response.status})`);
+                }
+
                 const data = await response.json();
 
-                if (!data || data.length === 0) {
+                // 防呆判斷：確保回應資料是陣列
+                if (!Array.isArray(data) || data.length === 0) {
                     tableBody.innerHTML = `
                         <tr>
                             <td colspan="6" class="px-6 py-8 text-center text-slate-400 text-sm">
@@ -87,10 +84,8 @@
                     return;
                 }
 
-                // 2. 讓最新的紀錄排在最上面，取最新的 15 筆
                 const recentData = data.slice(-15).reverse();
 
-                // 3. 把資料轉換成漂亮的表格 HTML
                 tableBody.innerHTML = recentData.map(item => `
                     <tr class="hover:bg-slate-700/40 transition">
                         <td class="px-6 py-4 font-mono text-slate-400 whitespace-nowrap">
@@ -123,16 +118,15 @@
                 tableBody.innerHTML = `
                     <tr>
                         <td colspan="6" class="px-6 py-6 text-center text-rose-400 text-sm">
-                            ⚠️ 連線失敗，請確定伺服器已啟動 (node server.js)
+                            ⚠️ 連線失敗，請確定伺服器與資料庫連線正常 (${error.message})
                         </td>
                     </tr>`;
             }
         }
 
-        // 當畫面打開時，立刻載入一次資料，並設定每 5 秒自動無感重新整理
         document.addEventListener('DOMContentLoaded', () => {
             loadDashboardRecords();
-            setInterval(loadDashboardRecords, 5000); // 每 5 秒自動同步最新進貨資料
+            setInterval(loadDashboardRecords, 5000);
         });
     </script>
 </body>
