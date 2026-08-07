@@ -1,0 +1,12 @@
+# 敏感環境變數檔案（絕對不要上傳到 GitHub！）
+.env
+.env.local
+.env.development.local
+.env.production.local
+
+# 依賴套件包（體積龐大，無須上傳）
+node_modules/
+
+# 系統與日誌檔
+.DS_Store
+*.log

@@ -1,0 +1,18 @@
+{
+  "short_name": "先馳倉儲",
+  "name": "先馳微笑倉儲管理系統",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/scan.html",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/"
+}

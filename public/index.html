@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>先馳微笑倉儲 - 後台管理儀表板</title>
+    <!-- 引入 PWA 設定與 Tailwind CSS 樣式 -->
+    <link rel="manifest" href="/manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto space-y-6">
+
+        <!-- 頂部頁首區塊 -->
+        <header class="flex justify-between items-center bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold text-amber-400 flex items-center gap-2">
+                    🏢 先馳微笑倉儲管理儀表板
+                </h1>
+                <p class="text-xs md:text-sm text-slate-400 mt-1">即時車輛進貨、司機打卡與棧板統計總覽</p>
+            </div>
+            <a href="/scan.html" target="_blank" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2.5 rounded-xl transition text-sm flex items-center gap-1 shadow-md">
+                📱 前往司機作業端 ➔
+            </a>
+        </header>
+
+        <!-- 核心表格區塊：顯示司機、車輛、廠商與棧板動態 -->
+        <main class="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
+            
+            <!-- 表頭區 -->
+            <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-800/90">
+                <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                    <span>🚛</span> 即時司機車輛與貨物進貨動態
+                </h2>
+                <button onclick="loadDashboardRecords()" class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                    🔄 立即重新整理
+                </button>
+            </div>
+
+            <!-- 響應式表格 -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-300">
+                    <thead class="bg-slate-900/90 text-xs uppercase text-slate-400 border-b border-slate-700">
+                        <tr>
+                            <th class="px-6 py-4 font-semibold">進貨時間</th>
+                            <th class="px-6 py-4 font-semibold">廠商名稱</th>
+                            <th class="px-6 py-4 font-semibold">司機姓名</th>
+                            <th class="px-6 py-4 font-semibold">車牌號碼</th>
+                            <th class="px-6 py-4 font-semibold text-center">棧板數量</th>
+                            <th class="px-6 py-4 font-semibold text-center">狀態</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dashboardRecordsTable" class="divide-y divide-slate-700/60">
+                        <!-- 資料載入中的預設文字 -->
+                        <tr>
+                            <td colspan="6" class="px-6 py-8 text-center text-slate-400 text-xs">
+                                正在讀取進貨動態...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </main>
+
+    </div>
+
+    <!-- 自動抓取資料並渲染表格的腳本 -->
+    <script>
+        async function loadDashboardRecords() {
+            const tableBody = document.getElementById('dashboardRecordsTable');
+            if (!tableBody) return;
+
+            try {
+                // 1. 向後端取得進貨資料
+                const response = await fetch('/api/records');
+                const data = await response.json();
+
+                if (!data || data.length === 0) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="px-6 py-8 text-center text-slate-400 text-sm">
+                                目前尚無任何進貨紀錄
+                            </td>
+                        </tr>`;
+                    return;
+                }
+
+                // 2. 讓最新的紀錄排在最上面，取最新的 15 筆
+                const recentData = data.slice(-15).reverse();
+
+                // 3. 把資料轉換成漂亮的表格 HTML
+                tableBody.innerHTML = recentData.map(item => `
+                    <tr class="hover:bg-slate-700/40 transition">
+                        <td class="px-6 py-4 font-mono text-slate-400 whitespace-nowrap">
+                            ⏱️ ${item.time || '剛剛'}
+                        </td>
+                        <td class="px-6 py-4 font-bold text-amber-400 whitespace-nowrap">
+                            🏢 ${item.supplier || '未指定廠商'}
+                        </td>
+                        <td class="px-6 py-4 text-white font-medium whitespace-nowrap">
+                            👤 ${item.driverName || '未登記'}
+                        </td>
+                        <td class="px-6 py-4 font-mono text-slate-200 whitespace-nowrap">
+                            🚛 ${item.plateNumber || '未紀錄'}
+                        </td>
+                        <td class="px-6 py-4 text-center whitespace-nowrap">
+                            <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full font-bold">
+                                📦 ${item.palletCount || 1} 棧
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-center whitespace-nowrap">
+                            <span class="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full text-xs font-semibold">
+                                ${item.status || '已進貨'}
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                console.error('資料讀取失敗:', error);
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-6 py-6 text-center text-rose-400 text-sm">
+                            ⚠️ 連線失敗，請確定伺服器已啟動 (node server.js)
+                        </td>
+                    </tr>`;
+            }
+        }
+
+        // 當畫面打開時，立刻載入一次資料，並設定每 5 秒自動無感重新整理
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboardRecords();
+            setInterval(loadDashboardRecords, 5000); // 每 5 秒自動同步最新進貨資料
+        });
+    </script>
+</body>
+</html>

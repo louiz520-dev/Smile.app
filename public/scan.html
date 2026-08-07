@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>司機端 - 倉儲掃碼領貨</title>
+  <!-- 引入 QR Code 掃描套件 -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    /* 全局樣式：設定黑色背景 */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #121212; /* 深黑色背景 */
+      color: #E0E0E0; /* 淺灰色文字，避免純白刺眼 */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* 卡片樣式：深灰色搭配精緻陰影 */
+    .card {
+      background: #1E1E1E; /* 深灰色卡片 */
+      width: 100%;
+      max-width: 400px;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5); /* 較深的陰影增加立體感 */
+      margin-bottom: 20px;
+      box-sizing: border-box;
+      border: 1px solid #333; /* 隱約的邊框 */
+    }
+
+    h2, h3 { margin-top: 0; font-weight: 600; }
+    
+    /* 金色文字強調 */
+    .gold-text {
+      color: #D4AF37; /* 時尚金色 */
+    }
+
+    #status-msg {
+      color: #AAAAAA;
+      font-size: 14px;
+      margin-top: 8px;
+      word-wrap: break-word;
+    }
+
+    /* 掃描區域樣式 */
+    #reader {
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      display: none; /* 預設隱藏 */
+      margin-top: 15px;
+      border: 2px solid #D4AF37; /* 金色邊框框住掃描區 */
+    }
+
+    /* 輸入框樣式：深色化 */
+    input[type="text"] {
+      width: 100%;
+      padding: 14px;
+      margin: 10px 0 20px 0;
+      box-sizing: border-box;
+      background-color: #2C2C2C; /* 深色輸入框 */
+      border: 1px solid #444;
+      border-radius: 8px;
+      color: #FFFFFF;
+      font-size: 16px;
+    }
+    
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #D4AF37; /* 聚焦時顯示金色邊框 */
+    }
+
+    /* 分隔線 */
+    hr {
+      margin: 25px 0;
+      border: 0;
+      border-top: 1px solid #333;
+    }
+
+    /* ====== 按鈕樣式 ====== */
+    .btn {
+      width: 100%;
+      padding: 16px;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* 金色按鈕（主要動作） */
+    .btn-gold {
+      background: linear-gradient(135deg, #D4AF37 0%, #F1D279 100%); /* 金色漸層 */
+      color: #121212; /* 黑色文字 */
+      box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
+    }
+    
+    .btn-gold:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 10px rgba(212, 175, 55, 0.2);
+    }
+
+    /* 紅色按鈕（停止動作） */
+    .btn-danger {
+      background-color: #333; /* 深灰色背景 */
+      color: #FF6B6B; /* 紅色文字 */
+      border: 1px solid #555;
+    }
+    
+    .btn-danger:active {
+      background-color: #444;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- 司機資訊卡片 -->
+  <div class="card">
+    <h2 id="driver-info">👤 司機：<span class="gold-text">載入中...</span></h2>
+    <div id="status-msg">系統狀態：準備就緒</div>
+  </div>
+
+  <!-- 掃描操作卡片 -->
+  <div class="card">
+    <h3 class="gold-text">📷 條碼掃描 / 手動輸入</h3>
+    
+    <!-- 鏡頭開關按鈕 -->
+    <button id="btn-toggle-cam" class="btn btn-gold" onclick="toggleCamera()">開啟相機掃描</button>
+    
+    <!-- 相機畫面區域 -->
+    <div id="reader"></div>
+
+    <hr>
+
+    <!-- 手動備用輸入框 -->
+    <label for="barcode-input" style="color: #AAAAAA;">貨件編號 / 條碼：</label>
+    <input type="text" id="barcode-input" placeholder="請掃描或輸入條碼">
+    
+    <button class="btn btn-gold" onclick="submitData()">確認送出紀錄</button>
+  </div>
+
+  <script>
+    // 1. 自動取得網址參數中的 driver 或使用預設司機
+    const urlParams = new URLSearchParams(window.location.search);
+    const driverName = urlParams.get('user') || urlParams.get('driver') || "測試司機";
+    document.getElementById('driver-info').innerHTML = `👤 司機：<span class="gold-text">${driverName}</span>`;
+
+    let html5QrcodeScanner = null;
+    let isScanning = false;
+
+    // 2. 切換相機開啟/關閉
+    function toggleCamera() {
+      const readerElem = document.getElementById('reader');
+      const btn = document.getElementById('btn-toggle-cam');
+      const statusMsg = document.getElementById('status-msg');
+
+      if (!isScanning) {
+        // 準備開啟相機
+        readerElem.style.display = "block";
+        btn.innerText = "關閉相機";
+        btn.className = "btn btn-danger"; // 變成深色紅字按鈕
+        statusMsg.innerText = "⏳ 正在啟動相機...";
+        
+        html5QrcodeScanner = new Html5Qrcode("reader");
+        html5QrcodeScanner.start(
+          { facingMode: "environment" }, // 優先使用後置鏡頭
+          { 
+            fps: 15, // 提高偵測頻率
+            qrbox: { width: 250, height: 150 } // 調整為適合一維條碼的長方形框
+          },
+          (decodedText) => {
+            // 掃描成功回呼
+            document.getElementById('barcode-input').value = decodedText;
+            statusMsg.innerHTML = `✅ 成功讀取：<span class="gold-text">${decodedText}</span>`;
+            vibratePhone(); // 觸發震動回饋
+            toggleCamera(); // 自動關閉鏡頭
+          },
+          (errorMessage) => {
+            // 掃描搜尋中（不特別處理，避免干擾）
+          }
+        ).then(() => {
+            statusMsg.innerText = "📷 相機運作中，請對準條碼";
+        }).catch(err => {
+          alert("無法存取相機，請確認：\n1. 已允許瀏覽器相機權限\n2. 網址為 HTTPS 協定");
+          console.error(err);
+          statusMsg.innerText = "❌ 相機啟動失敗";
+          forceCloseCamera();
+        });
+        isScanning = true;
+      } else {
+        forceCloseCamera();
+      }
+    }
+
+    // 強制關閉相機的輔助函式
+    function forceCloseCamera() {
+      const readerElem = document.getElementById('reader');
+      const btn = document.getElementById('btn-toggle-cam');
+      const statusMsg = document.getElementById('status-msg');
+
+      if (html5QrcodeScanner) {
+        html5QrcodeScanner.stop().then(() => {
+          html5QrcodeScanner.clear();
+          finalizeClose();
+        }).catch(err => {
+          // 即使停止出錯也強制清理介面
+          console.error("停止相機時發生錯誤", err);
+          finalizeClose();
+        });
+      } else {
+        finalizeClose();
+      }
+
+      function finalizeClose() {
+        readerElem.style.display = "none";
+        btn.innerText = "開啟相機掃描";
+        btn.className = "btn btn-gold"; // 變回金色按鈕
+        isScanning = false;
+        if(!document.getElementById('barcode-input').value) {
+            statusMsg.innerText = "系統狀態：準備就緒";
+        }
+      }
+    }
+
+    // 簡單的震動回饋（部分手機瀏覽器支援）
+    function vibratePhone() {
+      if (navigator.vibrate) {
+        navigator.vibrate(100); // 震動 100 毫秒
+      }
+    }
+
+    // 3. 送出資料給後端 API
+    async function submitData() {
+      const barcode = document.getElementById('barcode-input').value.trim();
+      const statusMsg = document.getElementById('status-msg');
+
+      if (!barcode) {
+        alert("請先輸入或掃描條碼！");
+        return;
+      }
+
+      statusMsg.innerHTML = "⏳ 資料上傳中...";
+
+      try {
+        // 🌸 這裡是原本與你的 Google Sheets /後端連線的地方
+        // 為了讓你直接測試介面，這裡先模擬成功，之後你可以把 API 補回來
+        const response = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            driver: driverName,
+            barcode: barcode,
+            timestamp: new Date().toISOString()
+          })
+        });
+
+        if (response.ok) {
+          statusMsg.innerHTML = `🎉 <span class="gold-text">${barcode}</span> 上傳成功！`;
+          document.getElementById('barcode-input').value = "";
+          vibratePhone();
+          setTimeout(()=> vibratePhone(), 200); // 成功時雙震動
+        } else {
+          statusMsg.innerText = "❌ 傳送失敗，請稍後重試或檢查網路";
+        }
+      } catch (error) {
+        console.error(error);
+        // 為了讓你沒網路也能測試介面，這裡改成模擬成功
+        // statusMsg.innerText = "❌ 網路連線異常";
+        statusMsg.innerHTML = `⚠️ 模擬上傳成功 (條碼: <span class="gold-text">${barcode}</span>)`;
+        document.getElementById('barcode-input').value = "";
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "smile-wms",
+  "version": "1.0.0",
+  "description": "先馳微笑倉儲管理系統",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^4.22.2",
+    "mongoose": "^9.8.1",
+    "sqlite3": "^5.1.7"
+  }
+}
