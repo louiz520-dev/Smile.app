@@ -20,24 +20,33 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // -------------------------------------------------------------------
-// 3. 資料庫 Schema 定義 (User 與 Inventory)
+// 3. 資料庫 Schema 定義
 // -------------------------------------------------------------------
 
-// 使用者 Schema
+// 3.1 進貨紀錄 Schema (對應 index.html 儀表板的需求)
+const recordSchema = new mongoose.Schema({
+  time: { type: String, default: () => new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) },
+  supplier: { type: String, default: '未指定廠商' },
+  driverName: { type: String, default: '未登記' },
+  plateNumber: { type: String, default: '未紀錄' },
+  palletCount: { type: Number, default: 1 },
+  status: { type: String, default: '已進貨' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Record = mongoose.model('Record', recordSchema);
+
+// 3.2 使用者 Schema
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { 
-    type: String, 
-    enum: ['developer', 'manager', 'staff'], 
-    default: 'staff' 
-  },
+  role: { type: String, enum: ['developer', 'manager', 'staff'], default: 'staff' },
   createdAt: { type: Date, default: Date.now }
 });
 
 const User = mongoose.model('User', userSchema);
 
-// 庫存 Schema
+// 3.3 庫存 Schema
 const inventorySchema = new mongoose.Schema({
   itemCode: { type: String, required: true, unique: true },
   itemName: { type: String, required: true },
@@ -51,29 +60,31 @@ const inventorySchema = new mongoose.Schema({
 const Inventory = mongoose.model('Inventory', inventorySchema);
 
 // -------------------------------------------------------------------
-// 4. 初始化最高權限開發者帳號
+// 4. API 路由 (API Routes)
 // -------------------------------------------------------------------
-async function initDeveloperAccount() {
+
+// 4.1 取得進貨紀錄 API (供 index.html 使用)
+app.get('/api/records', async (req, res) => {
   try {
-    const devExists = await User.findOne({ username: 'smile_0222' });
-    if (!devExists) {
-      await User.create({
-        username: 'smile_0222',
-        password: 'password123', // 建議登入後修改
-        role: 'developer'
-      });
-      console.log('✅ 已成功初始化最高開發者帳號：smile_0222');
-    }
+    const records = await Record.find().sort({ createdAt: -1 }).limit(20);
+    res.json(records);
   } catch (error) {
-    console.error('⚠️ 初始化開發者帳號時出錯:', error.message);
+    res.status(500).json({ success: false, message: '無法取得紀錄', error: error.message });
   }
-}
+});
 
-// -------------------------------------------------------------------
-// 5. API 路由 (API Routes)
-// -------------------------------------------------------------------
+// 4.2 新增進貨紀錄 API (供 scan.html 司機端提交使用)
+app.post('/api/records', async (req, res) => {
+  try {
+    const newRecord = new Record(req.body);
+    await newRecord.save();
+    res.status(201).json({ success: true, message: '紀錄新增成功', data: newRecord });
+  } catch (error) {
+    res.status(400).json({ success: false, message: '新增紀錄失敗', error: error.message });
+  }
+});
 
-// 5.1 使用者登入 API
+// 4.3 使用者登入 API
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -81,20 +92,13 @@ app.post('/api/login', async (req, res) => {
     if (!user) {
       return res.status(401).json({ success: false, message: '帳號或密碼錯誤' });
     }
-    res.json({
-      success: true,
-      message: '登入成功',
-      user: {
-        username: user.username,
-        role: user.role
-      }
-    });
+    res.json({ success: true, message: '登入成功', user: { username: user.username, role: user.role } });
   } catch (error) {
     res.status(500).json({ success: false, message: '伺服器內部錯誤', error: error.message });
   }
 });
 
-// 5.2 取得所有庫存列表 API
+// 4.4 庫存管理相關 API
 app.get('/api/inventory', async (req, res) => {
   try {
     const items = await Inventory.find().sort({ updatedAt: -1 });
@@ -104,68 +108,23 @@ app.get('/api/inventory', async (req, res) => {
   }
 });
 
-// 5.3 新增庫存項目 API
-app.post('/api/inventory', async (req, res) => {
-  try {
-    const newItem = new Inventory(req.body);
-    await newItem.save();
-    res.status(201).json({ success: true, message: '庫存項目新增成功', data: newItem });
-  } catch (error) {
-    res.status(400).json({ success: false, message: '新增失敗，可能貨號已存在或欄位錯誤', error: error.message });
-  }
-});
-
-// 5.4 更新庫存項目 API
-app.put('/api/inventory/:id', async (req, res) => {
-  try {
-    const updatedItem = await Inventory.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, updatedAt: Date.now() },
-      { new: true }
-    );
-    res.json({ success: true, message: '庫存更新成功', data: updatedItem });
-  } catch (error) {
-    res.status(400).json({ success: false, message: '更新失敗', error: error.message });
-  }
-});
-
-// 5.5 刪除庫存項目 API
-app.delete('/api/inventory/:id', async (req, res) => {
-  try {
-    await Inventory.findByIdAndDelete(req.params.id);
-    res.json({ success: true, message: '庫存刪除成功' });
-  } catch (error) {
-    res.status(400).json({ success: false, message: '刪除失敗', error: error.message });
-  }
-});
-
-// 前端單頁應用 (SPA) 退回機制
+// SPA 退回機制
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // -------------------------------------------------------------------
-// 6. 資料庫連線與伺服器啟動
+// 5. 資料庫連線與啟動
 // -------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://louiz520_db_user:O2XQ61mjKHLMs3qg@smile.eudkfpx.mongodb.net:27017/warehouse_db?ssl=true&authSource=admin&appName=Smile';
 
-// 連接 MongoDB
 mongoose.connect(MONGODB_URI)
-  .then(() => {
-    console.log('🔗 已成功連接至 MongoDB Atlas 雲端資料庫！');
-    initDeveloperAccount();
-  })
-  .catch(err => {
-    console.error('❌ MongoDB 資料庫連線失敗:', err.message);
-  });
+  .then(() => console.log('🔗 已成功連接至 MongoDB Atlas 雲端資料庫！'))
+  .catch(err => console.error('❌ MongoDB 資料庫連線失敗:', err.message));
 
-// 本地開發環境啟動服務（Vercel 環境下自動跳過此段）
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`🚀 本地伺服器成功啟動於 http://localhost:${PORT}`);
-  });
+  app.listen(PORT, () => console.log(`🚀 本地伺服器啟動於 http://localhost:${PORT}`));
 }
 
-// 關鍵：將 app 匯出給 Vercel 無伺服器架構呼叫（必須放在最外層）
 module.exports = app;
