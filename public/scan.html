@@ -67,6 +67,13 @@
     .btn-danger { background-color: #333; color: #FF6B6B; border: 1px solid #555; }
     #print-area { display: none; background: #FFF; color: #000; padding: 15px; border-radius: 8px; margin-top: 15px; text-align: center; }
     #qrcode-output { display: flex; justify-content: center; margin: 10px 0; }
+
+    @media print {
+      body { background-color: #FFF; color: #000; padding: 0; }
+      .card, .btn, hr, #reader { display: none !important; }
+      #print-area { display: block !important; border: none; box-shadow: none; margin: 0; padding: 0; }
+      .no-print { display: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -359,7 +366,7 @@
       const qtyBox = document.getElementById(`qty-box-${id}`);
       const subBox = document.getElementById(`sub-${id}`);
 
-      if (cb.checked) {
+      if (cb && cb.checked) {
         if (qtyBox) qtyBox.style.display = 'flex';
         if (subBox) subBox.style.display = 'block';
       } else {
@@ -371,6 +378,7 @@
 
     function changeQty(inputId, delta) {
       const input = document.getElementById(inputId);
+      if (!input) return;
       let val = parseInt(input.value) || 1;
       val += delta;
       if (val < 1) val = 1;
@@ -383,15 +391,19 @@
       const checkedBoxes = document.querySelectorAll('.p-check:checked');
       checkedBoxes.forEach(cb => {
         const id = cb.getAttribute('data-id');
-        const qty = parseInt(document.getElementById(`input-qty-${id}`).value) || 1;
+        const qtyInput = document.getElementById(`input-qty-${id}`);
+        const qty = qtyInput ? (parseInt(qtyInput.value) || 1) : 1;
         total += qty;
       });
       document.getElementById('total-pallet-count').innerText = `總計：${total} 板`;
     }
 
     function toggleCustomInput(selectId, inputId) {
-      const selVal = document.getElementById(selectId).value;
-      document.getElementById(inputId).style.display = (selVal === 'CUSTOM') ? 'block' : 'none';
+      const sel = document.getElementById(selectId);
+      const input = document.getElementById(inputId);
+      if (sel && input) {
+        input.style.display = (sel.value === 'CUSTOM') ? 'block' : 'none';
+      }
     }
 
     function handleStatusChange(activeSubId) {
@@ -412,7 +424,8 @@
 
       checkedBoxes.forEach(cb => {
         const id = cb.getAttribute('data-id');
-        const count = parseInt(document.getElementById(`input-qty-${id}`).value) || 1;
+        const qtyInput = document.getElementById(`input-qty-${id}`);
+        const count = qtyInput ? (parseInt(qtyInput.value) || 1) : 1;
         let name = '';
 
         if (id === 'red') {
