@@ -1,6 +1,9 @@
 // 1. 載入環境變數設定 (.env)
 require('dotenv').config();
 
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']); // 強制使用 Google DNS 解析 MongoDB 網址
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -145,19 +148,24 @@ app.get('*', (req, res) => {
 // 6. 資料庫連線與伺服器啟動
 // -------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
-
-// 使用標準連線格式避免 SRV DNS 阻擋
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://louiz520_db_user:O2XQ61mjKHLMs3qg@smile.eudkfpx.mongodb.net:27017/warehouse_db?ssl=true&authSource=admin&appName=Smile';
 
+// 連接 MongoDB
 mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('🔗 已成功連接至 MongoDB Atlas 雲端資料庫！');
-    initDeveloperAccount(); // 自動檢查並建立最高開發者帳號
-    
-    app.listen(PORT, () => {
-      console.log(`🚀 伺服器成功啟動於 http://localhost:${PORT}`);
-    });
+    initDeveloperAccount();
   })
   .catch(err => {
     console.error('❌ MongoDB 資料庫連線失敗:', err.message);
   });
+
+// 本地開發環境啟動服務（Vercel 環境下自動跳過此段）
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 本地伺服器成功啟動於 http://localhost:${PORT}`);
+  });
+}
+
+// 關鍵：將 app 匯出給 Vercel 無伺服器架構呼叫（必須放在最外層）
+module.exports = app;
