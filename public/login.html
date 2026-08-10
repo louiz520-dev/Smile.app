@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>司機端系統登入</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body {
+            background-color: #f4f6f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .login-card {
+            background: #ffffff;
+            padding: 30px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 380px;
+        }
+        .login-title {
+            text-align: center;
+            color: #333;
+            margin-bottom: 25px;
+            font-size: 22px;
+            font-weight: bold;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus {
+            border-color: #007bff;
+        }
+        .btn-login {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-login:hover {
+            background-color: #0056b3;
+        }
+        .error-msg {
+            color: #dc3545;
+            font-size: 14px;
+            text-align: center;
+            margin-top: 15px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-card">
+    <div class="login-title">🚛 司機端系統登入</div>
+    <form id="loginForm">
+        <div class="form-group">
+            <label for="driverName">司機帳號 / 姓名</label>
+            <input type="text" id="driverName" placeholder="請輸入姓名 (例: 王小明)" required>
+        </div>
+        <div class="form-group">
+            <label for="password">登入密碼</label>
+            <input type="password" id="password" placeholder="請輸入密碼" required>
+        </div>
+        <button type="submit" class="btn-login">登入系統</button>
+        <div id="errorMsg" class="error-msg">帳號或密碼錯誤！</div>
+    </form>
+</div>
+
+<script>
+    // 預設的司機密碼（若需簡易防護可在前端設定，或依您需要與後端 GAS 對接）
+    const DEFAULT_PASSWORD = "123"; 
+
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const driverName = document.getElementById('driverName').value.trim();
+        const password = document.getElementById('password').value.trim();
+        const errorMsg = document.getElementById('errorMsg');
+
+        // 簡單驗證邏輯：可設定統一密碼，或是讓密碼不為空即可
+        if (password === DEFAULT_PASSWORD || password !== "") {
+            // 1. 將登入狀態記在瀏覽器 LocalStorage 中，保持登入狀態
+            localStorage.setItem('driverUser', driverName);
+            localStorage.setItem('isDriverLoggedIn', 'true');
+
+            // 2. 自動跳轉至掃描頁面，並帶上 user 參數
+            window.location.href = `scan.html?user=${encodeURIComponent(driverName)}`;
+        } else {
+            errorMsg.style.display = 'block';
+        }
+    });
+</script>
+
+</body>
+</html>
