@@ -4,58 +4,201 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>倉儲棧板管理與動態庫存儀表板</title>
+  <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #FFF; margin: 0; padding: 15px; }
-    h1, h2 { color: #D4AF37; margin-top: 0; font-size: 16px; margin-bottom: 10px; }
-    
-    .top-bar {
-      background: #1E1E1E; border: 1px solid #D4AF37; padding: 12px 18px;
-      border-radius: 10px; margin-bottom: 15px; display: flex; flex-wrap: wrap;
-      justify-content: space-between; align-items: center; gap: 10px;
+    :root {
+      --bg-dark: #121212;
+      --card-bg: #1E1E1E;
+      --accent-gold: #D4AF37;
+      --text-main: #FFFFFF;
+      --text-muted: #AAAAAA;
+      --border-color: #333333;
+      --success-color: #4CAF50;
+      --danger-color: #FF5252;
     }
-    .top-left { display: flex; align-items: center; gap: 12px; }
-    .driver-generator { display: flex; align-items: center; gap: 6px; background: #2A2A2A; padding: 6px 10px; border-radius: 8px; border: 1px solid #444; }
-    .driver-generator input { background: #121212; border: 1px solid #555; color: #FFF; padding: 6px; border-radius: 6px; font-size: 13px; width: 100px; }
-    
-    .btn {
-      padding: 8px 14px; font-size: 13px; font-weight: bold; border: none;
-      border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; transition: all 0.2s;
-    }
-    .btn-gold { background: linear-gradient(135deg, #D4AF37 0%, #F1D279 100%); color: #121212; }
-    .btn-gold:hover { opacity: 0.9; }
-    .btn-outline { background: transparent; color: #D4AF37; border: 1px solid #D4AF37; }
 
-    /* 圖表網格列 */
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-bottom: 15px; }
-    
-    /* 圖表卡片 */
-    .card { background: #1E1E1E; border: 1px solid #333; padding: 12px 15px; border-radius: 10px; box-sizing: border-box; }
-    .chart-card { height: 260px; display: flex; flex-direction: column; }
-    
-    /* 強制圖表容器縮小固定比例 */
-    .chart-container { flex: 1; position: relative; width: 100%; height: 200px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      margin: 0;
+      padding: 15px;
+      box-sizing: border-box;
+    }
+
+    h1, h2 {
+      color: var(--accent-gold);
+      margin-top: 0;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+
+    /* 上方功能列 */
+    .top-bar {
+      background: var(--card-bg);
+      border: 1px solid var(--accent-gold);
+      padding: 12px 18px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .top-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-info {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: 10px;
+    }
+
+    .driver-generator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #2A2A2A;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid #444;
+    }
+    .driver-generator input {
+      background: var(--bg-dark);
+      border: 1px solid #555;
+      color: #FFF;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      width: 110px;
+      outline: none;
+    }
+    .driver-generator input:focus {
+      border-color: var(--accent-gold);
+    }
+
+    /* 按鈕樣式 */
+    .btn {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+    }
+    .btn-gold {
+      background: linear-gradient(135deg, #D4AF37 0%, #F1D279 100%);
+      color: #121212;
+    }
+    .btn-gold:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-outline {
+      background: transparent;
+      color: var(--accent-gold);
+      border: 1px solid var(--accent-gold);
+    }
+    .btn-outline:hover {
+      background: rgba(212, 175, 55, 0.1);
+    }
+
+    /* 卡片與圖表區塊 */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      padding: 15px;
+      border-radius: 10px;
+      box-sizing: border-box;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .chart-card {
+      height: 280px;
+      display: flex;
+      flex-direction: column;
+    }
+    .chart-container {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
 
     /* 表格樣式 */
-    table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 13px; }
-    th, td { border: 1px solid #444; padding: 6px 8px; text-align: left; }
-    th { background-color: #2A2A2A; color: #D4AF37; }
-    .badge { background: #D4AF37; color: #121212; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; margin-right: 4px; display: inline-block; }
+    .table-responsive {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 5px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #333;
+      padding: 8px 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #2A2A2A;
+      color: var(--accent-gold);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    tr:nth-child(even) { background-color: rgba(255, 255, 255, 0.02); }
+    tr:hover { background-color: rgba(212, 175, 55, 0.05); }
+
+    /* 狀態與棧板標籤 (Badge) */
+    .badge {
+      background: rgba(212, 175, 55, 0.2);
+      color: #F1D279;
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 11px;
+      margin-right: 4px;
+      margin-bottom: 2px;
+      display: inline-block;
+    }
+    .status-badge {
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .status-in { background: rgba(76, 175, 80, 0.2); color: var(--success-color); border: 1px solid var(--success-color); }
+    .status-out { background: rgba(255, 82, 82, 0.2); color: var(--danger-color); border: 1px solid var(--danger-color); }
   </style>
 </head>
 <body>
 
+  <!-- 頂部列 -->
   <div class="top-bar">
     <div class="top-left">
       <h1 style="margin:0; font-size: 18px;">🚚 倉儲管理儀表板</h1>
       <a href="/scan.html" class="btn btn-gold" target="_blank">📱 前往司機端 ↗</a>
+      <span class="status-info" id="last-updated">更新時間：載入中...</span>
     </div>
 
     <div class="driver-generator">
-      <span style="font-size: 13px; color: #AAA;">司機：</span>
+      <span style="font-size: 13px; color: var(--text-muted);">司機：</span>
       <input type="text" id="driver-input" placeholder="例如：王小明">
       <button class="btn btn-outline" onclick="openDriverPage()" style="padding: 5px 10px; font-size: 12px;">開啟</button>
       <button class="btn btn-gold" onclick="copyDriverLink()" style="padding: 5px 10px; font-size: 12px;">複製連結</button>
+      <button class="btn btn-outline" onclick="fetchAnalytics()" style="padding: 5px 8px; font-size: 12px;" title="手動重新整理">🔄</button>
     </div>
   </div>
 
@@ -78,130 +221,201 @@
   <!-- 📋 當日作業紀錄與數量明細表 -->
   <div class="card">
     <h2>📋 當日單次作業紀錄與數量明細</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>時間</th>
-          <th>司機</th>
-          <th>條碼/單號</th>
-          <th>棧板明細 (個別數量)</th>
-          <th>貨物動態</th>
-        </tr>
-      </thead>
-      <tbody id="today-table">
-        <tr><td colspan="5" style="text-align:center; color:#888;">載入中...</td></tr>
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 100px;">時間</th>
+            <th style="width: 120px;">司機</th>
+            <th style="width: 160px;">條碼/單號</th>
+            <th>棧板明細 (個別數量)</th>
+            <th style="width: 100px;">貨物動態</th>
+          </tr>
+        </thead>
+        <tbody id="today-table">
+          <tr><td colspan="5" style="text-align:center; color: var(--text-muted);">資料載入中...</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <script>
     let dailyChart = null;
     let stockChart = null;
+    let isFetching = false; // 防止重疊 API 請求
 
+    // 取得司機專屬連結
     function getDriverUrl() {
       const name = document.getElementById('driver-input').value.trim() || '司機';
       return `${window.location.origin}/scan.html?driver=${encodeURIComponent(name)}`;
     }
 
-    function openDriverPage() { window.open(getDriverUrl(), '_blank'); }
+    function openDriverPage() { 
+      window.open(getDriverUrl(), '_blank'); 
+    }
 
     function copyDriverLink() {
       const url = getDriverUrl();
-      navigator.clipboard.writeText(url).then(() => { alert(`✅ 已複製司機專屬連結：\n${url}`); }).catch(() => { prompt("請複製連結：", url); });
+      navigator.clipboard.writeText(url)
+        .then(() => alert(`✅ 已複製司機專屬連結：\n${url}`))
+        .catch(() => prompt("請複製下方連結：", url));
     }
 
+    // 文字轉義，防止 XSS 攻擊
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // 主資料抓取與渲染函式
     async function fetchAnalytics() {
+      if (isFetching) return;
+      isFetching = true;
+
       try {
         const res = await fetch('/api/analytics');
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
 
-        // 1. 渲染今日明細表格
-        const tbody = document.getElementById('today-table');
-        tbody.innerHTML = '';
-        if (!data.todayRecords || data.todayRecords.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">今日尚無作業紀錄</td></tr>';
-        } else {
-          data.todayRecords.forEach(r => {
-            const pallets = Array.isArray(r.pallets) ? r.pallets : [];
-            const palletsHtml = pallets.map(p => {
-              if (typeof p === 'object' && p.name) {
-                return `<span class="badge">${p.name} x${p.count}</span>`;
-              }
-              return `<span class="badge">${p}</span>`;
-            }).join(' ');
+        // 0. 更新最後整理時間
+        const nowStr = new Date().toLocaleTimeString();
+        document.getElementById('last-updated').innerText = `最後更新：${nowStr}`;
 
-            const timeStr = new Date(r.created_at).toLocaleTimeString();
-            tbody.innerHTML += `
-              <tr>
-                <td>${timeStr}</td>
-                <td>${r.driver}</td>
-                <td>${r.barcode}</td>
-                <td>${palletsHtml || '無棧板資訊'}</td>
-                <td>${r.status}</td>
-              </tr>
-            `;
-          });
-        }
+        // 1. 渲染今日明細表格 (安全 DOM 操作)
+        renderTable(data.todayRecords || []);
 
-        // 2. 渲染今日進出數量長條圖
-        const palletKeys = Array.from(new Set([...Object.keys(data.dailyInMap || {}), ...Object.keys(data.dailyOutMap || {})]));
-        const inCounts = palletKeys.map(k => data.dailyInMap[k] || 0);
-        const outCounts = palletKeys.map(k => data.dailyOutMap[k] || 0);
-
-        if (dailyChart) dailyChart.destroy();
-        dailyChart = new Chart(document.getElementById('dailyChart'), {
-          type: 'bar',
-          data: {
-            labels: palletKeys.length ? palletKeys : ['無資料'],
-            datasets: [
-              { label: '進倉 (+)', data: inCounts.length ? inCounts : [0], backgroundColor: '#4CAF50' },
-              { label: '出倉 (-)', data: outCounts.length ? outCounts : [0], backgroundColor: '#FF5252' }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { labels: { color: '#FFF', font: { size: 11 } }, position: 'top' }
-            },
-            scales: {
-              x: { ticks: { color: '#AAA', font: { size: 10 } } },
-              y: { ticks: { color: '#AAA', font: { size: 10 } } }
-            }
-          }
-        });
-
-        // 3. 渲染庫存圓餅圖
-        const stockKeys = Object.keys(data.stockMap || {});
-        const stockValues = stockKeys.map(k => data.stockMap[k]);
-
-        if (stockChart) stockChart.destroy();
-        stockChart = new Chart(document.getElementById('stockChart'), {
-          type: 'pie',
-          data: {
-            labels: stockKeys.length ? stockKeys : ['暫無庫存'],
-            datasets: [{
-              data: stockValues.length ? stockValues : [1],
-              backgroundColor: ['#D4AF37', '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#E91E63', '#607D8B', '#795548']
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                position: 'right',
-                labels: { color: '#FFF', font: { size: 10 }, boxWidth: 12 }
-              }
-            }
-          }
-        });
+        // 2. 渲染長條圖與圓餅圖
+        renderDailyChart(data.dailyInMap || {}, data.dailyOutMap || {});
+        renderStockChart(data.stockMap || {});
 
       } catch (err) {
-        console.error("載入失敗:", err);
+        console.error("分析資料載入失敗:", err);
+        document.getElementById('last-updated').innerText = `更新失敗 (${new Date().toLocaleTimeString()})`;
+      } finally {
+        isFetching = false;
       }
     }
 
+    // 渲染表格內容
+    function renderTable(records) {
+      const tbody = document.getElementById('today-table');
+      tbody.innerHTML = '';
+
+      if (records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">今日尚無作業紀錄</td></tr>';
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+
+      records.forEach(r => {
+        const tr = document.createElement('tr');
+
+        // 格式化時間
+        const timeStr = r.created_at ? new Date(r.created_at).toLocaleTimeString() : '--:--:--';
+
+        // 處理棧板明細 Badge
+        const pallets = Array.isArray(r.pallets) ? r.pallets : [];
+        let palletsHtml = '無棧板資訊';
+        if (pallets.length > 0) {
+          palletsHtml = pallets.map(p => {
+            if (typeof p === 'object' && p !== null && p.name) {
+              return `<span class="badge">${escapeHtml(p.name)} x${escapeHtml(p.count)}</span>`;
+            }
+            return `<span class="badge">${escapeHtml(p)}</span>`;
+          }).join(' ');
+        }
+
+        // 動態狀態標籤 (進倉 / 出倉)
+        const statusText = escapeHtml(r.status || '未知');
+        let statusClass = 'status-badge';
+        if (statusText.includes('進') || statusText.includes('入')) statusClass += ' status-in';
+        else if (statusText.includes('出')) statusClass += ' status-out';
+
+        tr.innerHTML = `
+          <td>${escapeHtml(timeStr)}</td>
+          <td><strong>${escapeHtml(r.driver || '未填寫')}</strong></td>
+          <td><code>${escapeHtml(r.barcode || '-')}</code></td>
+          <td>${palletsHtml}</td>
+          <td><span class="${statusClass}">${statusText}</span></td>
+        `;
+
+        fragment.appendChild(tr);
+      });
+
+      tbody.appendChild(fragment);
+    }
+
+    // 渲染今日進出長條圖
+    function renderDailyChart(dailyInMap, dailyOutMap) {
+      const palletKeys = Array.from(new Set([...Object.keys(dailyInMap), ...Object.keys(dailyOutMap)]));
+      const inCounts = palletKeys.map(k => dailyInMap[k] || 0);
+      const outCounts = palletKeys.map(k => dailyOutMap[k] || 0);
+
+      const ctx = document.getElementById('dailyChart').getContext('2d');
+      if (dailyChart) dailyChart.destroy();
+
+      dailyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: palletKeys.length ? palletKeys : ['無資料'],
+          datasets: [
+            { label: '進倉 (+)', data: inCounts.length ? inCounts : [0], backgroundColor: '#4CAF50', borderRadius: 4 },
+            { label: '出倉 (-)', data: outCounts.length ? outCounts : [0], backgroundColor: '#FF5252', borderRadius: 4 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#FFF', font: { size: 11 } }, position: 'top' }
+          },
+          scales: {
+            x: { ticks: { color: '#AAA', font: { size: 10 } }, grid: { color: '#222' } },
+            y: { ticks: { color: '#AAA', font: { size: 10 } }, grid: { color: '#222' }, beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // 渲染庫存圓餅圖
+    function renderStockChart(stockMap) {
+      const stockKeys = Object.keys(stockMap);
+      const stockValues = stockKeys.map(k => stockMap[k]);
+
+      const ctx = document.getElementById('stockChart').getContext('2d');
+      if (stockChart) stockChart.destroy();
+
+      stockChart = new Chart(ctx, {
+        type: 'doughnut', // 使用甜甜圈圖比圓餅圖更容易閱讀
+        data: {
+          labels: stockKeys.length ? stockKeys : ['暫無庫存'],
+          datasets: [{
+            data: stockValues.length ? stockValues : [1],
+            backgroundColor: ['#D4AF37', '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#E91E63', '#00BCD4', '#795548'],
+            borderWidth: 2,
+            borderColor: '#1E1E1E'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: { color: '#FFF', font: { size: 11 }, boxWidth: 12, padding: 10 }
+            }
+          }
+        }
+      });
+    }
+
+    // 初始化載入與定時刷新 (10 秒)
     fetchAnalytics();
     setInterval(fetchAnalytics, 10000);
   </script>
