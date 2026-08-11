@@ -1,8 +1,21 @@
 const express = require('express');
+const path = require('path'); // 新增：匯入路徑模組
 const app = express();
 
 app.use(express.json());
-app.use(express.static('public'));
+
+// 1. 使用絕對路徑綁定 public 靜態目錄 (確保不同環境載入路徑都正確)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 2. 專門處理 /favicon.ico 請求 (雙重保障防止 404 錯誤)
+app.get('/favicon.ico', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'favicon.ico'), (err) => {
+    if (err) {
+      // 若檔案不存在，回傳 204 No Content，避免瀏覽器持續跳出紅色 404 警告
+      res.status(204).end();
+    }
+  });
+});
 
 // 記憶體儲存打卡紀錄 (生產環境可替換為資料庫)
 let records = [];
