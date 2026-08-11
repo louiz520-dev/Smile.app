@@ -354,8 +354,20 @@
   </div>
 
   <script>
+    // 🔍 檢查與獲取司機名字
     const urlParams = new URLSearchParams(window.location.search);
-    const driverName = urlParams.get('user') || urlParams.get('driver') || "測試司機";
+    let driverName = urlParams.get('user') || urlParams.get('driver') || localStorage.getItem('driverName');
+
+    // ⚠️ 未登入判斷：若找不到司機名稱，直接強制跳轉至登入頁面 public/login.html
+    if (!driverName) {
+      alert("⚠️ 尚未登入，請先登入司機帳號！");
+      window.location.href = 'public/login.html';
+    } else {
+      // 成功獲取司機名字，存入 localStorage 供後續使用
+      localStorage.setItem('driverName', driverName);
+    }
+
+    // 渲染司機名稱至介面
     document.getElementById('driver-info').innerHTML = `👤 司機：<span class="gold-text">${driverName}</span>`;
 
     let html5QrcodeScanner = null;
@@ -561,7 +573,6 @@
 
       statusMsg.innerHTML = "⏳ 資料寫入中...";
 
-      // 已設定為您的專屬 Google Apps Script 網址
       const gasUrl = 'https://script.google.com/macros/s/AKfycbxnsJ34G9EV0dlNMsQBezIKaHQHnICvUI-eR_wRwYGfFb1HPDT-Qck5ElPxF8hCf9iEHw/exec';
 
       try {
