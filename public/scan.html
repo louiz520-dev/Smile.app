@@ -361,7 +361,7 @@
     // ⚠️ 未登入判斷：若找不到司機名稱，直接強制跳轉至登入頁面 public/login.html
     if (!driverName) {
       alert("⚠️ 尚未登入，請先登入司機帳號！");
-      window.location.href = 'public/login.html';
+      window.location.href = 'login.html';
     } else {
       // 成功獲取司機名字，存入 localStorage 供後續使用
       localStorage.setItem('driverName', driverName);
