@@ -5,8 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>倉儲棧板管理與動態庫存儀表板</title>
   
-  <!-- 引入 favicon.ico 圖示 -->
+  <!-- 全套 Favicon 與 App 圖示設定 -->
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="manifest" href="/site.webmanifest">
 
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -396,7 +400,7 @@
       if (stockChart) stockChart.destroy();
 
       stockChart = new Chart(ctx, {
-        type: 'doughnut', // 使用甜甜圈圖比圓餅圖更容易閱讀
+        type: 'doughnut',
         data: {
           labels: stockKeys.length ? stockKeys : ['暫無庫存'],
           datasets: [{
