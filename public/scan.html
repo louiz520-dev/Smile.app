@@ -3,6 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <!-- 1. 引入 Web App Manifest -->
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- 2. iOS (Safari) PWA 支援標籤 -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="司機端掃碼">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  
+  <!-- 3. 主題顏色 (深色模式主題色) -->
+  <meta name="theme-color" content="#121212">
+
   <title>司機端 - 倉儲掃碼與棧板數量登載</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
