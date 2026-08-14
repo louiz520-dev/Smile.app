@@ -36,12 +36,20 @@
       margin-bottom: 20px;
       padding-bottom: 15px;
       border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+      gap: 10px;
     }
 
     h1 {
       color: var(--accent-gold);
       margin: 0;
       font-size: 20px;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
 
     .btn {
@@ -55,6 +63,7 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
+      transition: background 0.2s;
     }
 
     .btn-gold {
@@ -66,6 +75,15 @@
       background: transparent;
       color: var(--accent-gold);
       border: 1px solid var(--accent-gold);
+    }
+
+    .btn-green {
+      background: #2e7d32;
+      color: #ffffff;
+    }
+
+    .btn-green:hover {
+      background: #388e3c;
     }
 
     .search-input {
@@ -134,7 +152,9 @@
         <h1>📜 Google 試算表全歷史作業紀錄</h1>
         <small style="color: var(--text-muted);">顯示所有過往與最新的司機上傳紀錄</small>
       </div>
-      <div>
+      <div class="btn-group">
+        <!-- ⬇️ 匯出 CSV 按鈕 ⬇️ -->
+        <button onclick="exportToCSV()" class="btn btn-green">📥 匯出 CSV 報表</button>
         <button onclick="fetchHistory()" class="btn btn-outline">🔄 重新整理</button>
         <button onclick="window.close()" class="btn btn-gold">✕ 關閉分頁</button>
       </div>
@@ -165,6 +185,7 @@
 
   <script>
     let allRecords = [];
+    let displayedRecords = []; // 紀錄目前畫面上過濾後的資料
 
     async function fetchHistory() {
       const tbody = document.getElementById('history-table');
@@ -176,12 +197,15 @@
 
         if (!Array.isArray(data) || data.length === 0) {
           tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted); padding: 30px;">試算表中尚無歷史紀錄</td></tr>';
+          allRecords = [];
+          displayedRecords = [];
           return;
         }
 
         // 將試算表資料倒序呈現（最新紀錄在上）
         allRecords = [...data].reverse();
-        renderTable(allRecords);
+        displayedRecords = [...allRecords];
+        renderTable(displayedRecords);
 
       } catch (err) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--danger-color); padding: 30px;">⚠️ 讀取歷史資料失敗，請確認網路連線。</td></tr>';
@@ -216,18 +240,51 @@
     function filterData() {
       const q = document.getElementById('searchInput').value.toLowerCase().trim();
       if (!q) {
-        renderTable(allRecords);
+        displayedRecords = [...allRecords];
+      } else {
+        displayedRecords = allRecords.filter(r => {
+          return (r.driver || '').toLowerCase().includes(q) ||
+                 (r.barcode || '').toLowerCase().includes(q) ||
+                 (r.status || '').toLowerCase().includes(q) ||
+                 (r.palletStr || '').toLowerCase().includes(q);
+        });
+      }
+      renderTable(displayedRecords);
+    }
+
+    // ⬇️ 匯出 CSV 邏輯 ⬇️
+    function exportToCSV() {
+      if (displayedRecords.length === 0) {
+        alert('目前沒有資料可匯出！');
         return;
       }
 
-      const filtered = allRecords.filter(r => {
-        return (r.driver || '').toLowerCase().includes(q) ||
-               (r.barcode || '').toLowerCase().includes(q) ||
-               (r.status || '').toLowerCase().includes(q) ||
-               (r.palletStr || '').toLowerCase().includes(q);
-      });
+      // 建立 CSV 標頭與欄位
+      const headers = ['編號', '時間', '司機', '單號/條碼', '動作狀態', '棧板明細'];
+      const rows = displayedRecords.map((r, index) => [
+        index + 1,
+        `"${(r.timestamp || '').replace(/"/g, '""')}"`,
+        `"${(r.driver || '').replace(/"/g, '""')}"`,
+        `"${(r.barcode || '').replace(/"/g, '""')}"`,
+        `"${(r.status || '').replace(/"/g, '""')}"`,
+        `"${(r.palletStr || r.pallets || '').replace(/"/g, '""')}"`
+      ]);
 
-      renderTable(filtered);
+      // 組合 CSV 字串
+      let csvContent = headers.join(',') + '\n' + rows.map(row => row.join(',')).join('\n');
+
+      // 加入 \uFEFF BOM 標頭，確保 Excel 開啟時 UTF-8 中文不亂碼
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      
+      // 自動建立下載連結
+      const today = new Date().toISOString().split('T')[0];
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Smile_WMS_歷史紀錄_${today}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
 
     fetchHistory();
