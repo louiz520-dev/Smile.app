@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>歷史所有作業紀錄 - Smile WMS</title>
+  <style>
+    :root {
+      --bg-dark: #121212;
+      --card-bg: #1E1E1E;
+      --accent-gold: #D4AF37;
+      --text-main: #FFFFFF;
+      --text-muted: #AAAAAA;
+      --border-color: #333333;
+      --success-color: #4CAF50;
+      --danger-color: #FF5252;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    h1 {
+      color: var(--accent-gold);
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-gold {
+      background: linear-gradient(135deg, #D4AF37 0%, #F1D279 100%);
+      color: #121212;
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--accent-gold);
+      border: 1px solid var(--accent-gold);
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      margin-bottom: 15px;
+      box-sizing: border-box;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-gold);
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 15px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      border: 1px solid var(--border-color);
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #2A2A2A;
+      color: var(--accent-gold);
+    }
+
+    tr:nth-child(even) { background-color: rgba(255, 255, 255, 0.02); }
+    tr:hover { background-color: rgba(212, 175, 55, 0.05); }
+
+    .badge {
+      background: rgba(212, 175, 55, 0.2);
+      color: #F1D279;
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .status-in { color: var(--success-color); font-weight: bold; }
+    .status-out { color: var(--danger-color); font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header-bar">
+      <div>
+        <h1>📜 Google 試算表全歷史作業紀錄</h1>
+        <small style="color: var(--text-muted);">顯示所有過往與最新的司機上傳紀錄</small>
+      </div>
+      <div>
+        <button onclick="fetchHistory()" class="btn btn-outline">🔄 重新整理</button>
+        <button onclick="window.close()" class="btn btn-gold">✕ 關閉分頁</button>
+      </div>
+    </div>
+
+    <input type="text" id="searchInput" class="search-input" placeholder="🔍 快速搜尋司機、條碼單號、狀態或棧板名稱..." onkeyup="filterData()">
+
+    <div class="card">
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50px;">#</th>
+              <th>時間</th>
+              <th>司機</th>
+              <th>單號 / 條碼</th>
+              <th>動作狀態</th>
+              <th>棧板明細</th>
+            </tr>
+          </thead>
+          <tbody id="history-table">
+            <tr><td colspan="6" style="text-align:center; color: var(--text-muted); padding: 30px;">載入試算表歷史紀錄中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allRecords = [];
+
+    async function fetchHistory() {
+      const tbody = document.getElementById('history-table');
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted); padding: 30px;">載入試算表歷史紀錄中...</td></tr>';
+
+      try {
+        const res = await fetch('/api/records');
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted); padding: 30px;">試算表中尚無歷史紀錄</td></tr>';
+          return;
+        }
+
+        // 將試算表資料倒序呈現（最新紀錄在上）
+        allRecords = [...data].reverse();
+        renderTable(allRecords);
+
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--danger-color); padding: 30px;">⚠️ 讀取歷史資料失敗，請確認網路連線。</td></tr>';
+      }
+    }
+
+    function renderTable(list) {
+      const tbody = document.getElementById('history-table');
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted); padding: 20px;">找不到符合關鍵字的紀錄</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map((r, i) => {
+        const statusStr = r.status || '';
+        const isOut = statusStr.includes('出倉') || statusStr.includes('提貨') || statusStr.includes('越庫');
+        const statusClass = isOut ? 'status-out' : 'status-in';
+
+        return `
+          <tr>
+            <td style="color: var(--text-muted);">${i + 1}</td>
+            <td><small>${r.timestamp || '-'}</small></td>
+            <td><strong>${r.driver || '未知'}</strong></td>
+            <td><code>${r.barcode || '-'}</code></td>
+            <td class="${statusClass}">${statusStr || '未指定'}</td>
+            <td><span class="badge">${r.palletStr || r.pallets || '-'}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterData() {
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+      if (!q) {
+        renderTable(allRecords);
+        return;
+      }
+
+      const filtered = allRecords.filter(r => {
+        return (r.driver || '').toLowerCase().includes(q) ||
+               (r.barcode || '').toLowerCase().includes(q) ||
+               (r.status || '').toLowerCase().includes(q) ||
+               (r.palletStr || '').toLowerCase().includes(q);
+      });
+
+      renderTable(filtered);
+    }
+
+    fetchHistory();
+  </script>
+</body>
+</html>
