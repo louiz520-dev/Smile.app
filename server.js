@@ -3,23 +3,31 @@ const path = require('path');
 const app = express();
 
 app.use(express.json());
-
-// 1. 使用絕對路徑綁定 public 靜態目錄
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 2. 專門處理 /favicon.ico 請求 (避免控制台 404 警告)
 app.get('/favicon.ico', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'favicon.ico'), (err) => {
     if (err) res.status(204).end();
   });
 });
 
-// 3. 填入你的 Google Apps Script 部署網址
-const GOOGLE_SHEET_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxnsJ34G9EV0dlNMsQBezIKaHQHnICvUI-eR_wRwYGfFb1HPDT-Qck5ElPxF8hCf9iEHw/exec';
+// 最新 Google Apps Script 部署網址
+const GOOGLE_SHEET_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbykSrETQ6iyaRaFB82aEX4VciYaHQhzAH9Pi3XzECPVERr9GTYsDQxFBotJ8Fur-q6I0Q/exec';
 
-// 取得台灣時間 (Asia/Taipei) YYYY-MM-DD 日期字串
-function getTaiwanDateStr(dateInput) {
+// 將各式各樣的試算表日期字串（2026/8/11 下午 3:12:23 或 ISO 格式）統一轉換為 YYYY-MM-DD
+function normalizeDateStr(dateInput) {
   if (!dateInput) return '';
+  
+  // 處理台灣試算表常見的 "2026/8/11" 或 "2026/08/11"
+  const str = String(dateInput).trim();
+  const match = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (match) {
+    const y = match[1];
+    const m = match[2].padStart(2, '0');
+    const d = match[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
   const date = new Date(dateInput);
   if (isNaN(date.getTime())) return '';
   return new Intl.DateTimeFormat('en-CA', {
@@ -30,7 +38,6 @@ function getTaiwanDateStr(dateInput) {
   }).format(date);
 }
 
-// 剖析試算表內的棧板明細字串 (例如 "中華綠板 (單面) x15")
 function parsePalletString(palletData) {
   if (!palletData) return [];
   if (Array.isArray(palletData)) return palletData;
@@ -45,7 +52,7 @@ function parsePalletString(palletData) {
   });
 }
 
-// 1. 司機端提交 API (POST /api/scan) -> 寫入 Google 試算表
+// 1. 司機端提交 API (POST /api/scan)
 app.post('/api/scan', async (req, res) => {
   try {
     const { driver, barcode, status, pallets } = req.body;
@@ -54,7 +61,6 @@ app.post('/api/scan', async (req, res) => {
       return res.status(400).json({ error: '缺少條碼或棧板資訊' });
     }
 
-    // 轉發給 Google 試算表 (GAS)
     const response = await fetch(GOOGLE_SHEET_WEB_APP_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -70,35 +76,49 @@ app.post('/api/scan', async (req, res) => {
   }
 });
 
-// 2. 後台動態分析 API (GET /api/analytics) -> 從 Google 試算表讀取歷史與最新資料
+// 2. 後台動態分析 API (GET /api/analytics)
 app.get('/api/analytics', async (req, res) => {
   try {
-    // 呼叫 GAS 讀取試算表全量資料
     const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
-    const rawRecords = await sheetResponse.json();
+    const responseText = await sheetResponse.text();
 
-    const todayStr = getTaiwanDateStr(new Date());
+    if (responseText.trim().startsWith('<')) {
+      console.error('❌ [GAS 權限警告] 抓到的是 HTML 頁面而非 JSON，請將 GAS 存取權限改為「任何人」！');
+      return res.status(200).json({
+        todayRecords: [],
+        dailyInMap: {},
+        dailyOutMap: {},
+        stockMap: {}
+      });
+    }
 
-    // 格式化資料結構
+    let rawRecords = [];
+    try {
+      rawRecords = JSON.parse(responseText);
+    } catch (e) {
+      console.error('❌ JSON 剖析失敗:', e);
+    }
+
+    const todayStr = normalizeDateStr(new Date());
+
     const records = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => ({
       id: r.timestamp || Date.now() - index,
-      driver: r.driver || '測試司機',
+      driver: r.driver || '未知司機',
       barcode: r.barcode || '',
       status: r.status || '',
       pallets: parsePalletString(r.palletStr || r.pallets),
       created_at: r.timestamp
     }));
 
-    // 篩選出今日在台灣時間下的紀錄
-    const todayRecords = records.filter(r => getTaiwanDateStr(r.created_at) === todayStr);
+    // 精確比對當日日期
+    const todayRecords = records.filter(r => normalizeDateStr(r.created_at) === todayStr);
 
     const dailyInMap = {};
     const dailyOutMap = {};
     const stockMap = {};
 
-    // 追朔全歷史紀錄運算動態總庫存，並統計今日進出量
     records.forEach(r => {
-      const recordDateStr = getTaiwanDateStr(r.created_at);
+      const recordDateStr = normalizeDateStr(r.created_at);
       const isToday = (recordDateStr === todayStr);
       const isOut = r.status.includes('出倉') || r.status.includes('提貨') || r.status.includes('越庫');
 
@@ -106,7 +126,6 @@ app.get('/api/analytics', async (req, res) => {
         const pName = p.name;
         const pCount = p.count;
 
-        // 計算歷史動態總庫存
         if (!stockMap[pName]) stockMap[pName] = 0;
         if (isOut) {
           stockMap[pName] = Math.max(0, stockMap[pName] - pCount);
@@ -114,7 +133,6 @@ app.get('/api/analytics', async (req, res) => {
           stockMap[pName] += pCount;
         }
 
-        // 計算今日進出量
         if (isToday) {
           if (isOut) {
             dailyOutMap[pName] = (dailyOutMap[pName] || 0) + pCount;
@@ -132,12 +150,17 @@ app.get('/api/analytics', async (req, res) => {
       stockMap
     });
   } catch (error) {
-    console.error('讀取 Google 試算表失敗:', error);
-    res.status(500).json({ error: '無法讀取 Google 試算表歷史資料' });
+    console.error('讀取失敗:', error);
+    res.status(200).json({
+      todayRecords: [],
+      dailyInMap: {},
+      dailyOutMap: {},
+      stockMap: {}
+    });
   }
 });
 
-// 3. 備用讀取全紀錄 API
+// 3. 讀取所有歷史紀錄 API
 app.get('/api/records', async (req, res) => {
   try {
     const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
@@ -148,9 +171,14 @@ app.get('/api/records', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
+// 匯出 Express app 供 api/index.js (Vercel Serverless Function) 呼叫
 module.exports = app;
+
+// 只有在「直接執行此檔 (node server.js)」時才會監聽 Port
+// 部署至 Vercel 時此判斷為 false，可避免 Port 衝突與伺服器掛載失敗
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
