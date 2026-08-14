@@ -3,14 +3,16 @@
   "name": "Smile 倉儲管理系統",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/1554/1554581.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/1554/1554581.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
   "start_url": "/scan.html",

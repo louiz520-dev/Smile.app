@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>倉儲棧板管理與動態庫存儀表板</title>
   
   <!-- 全套 Favicon 與 App 圖示設定 -->
@@ -10,7 +10,19 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-  <link rel="manifest" href="/site.webmanifest">
+  
+  <!-- 1. Web App Manifest (建議檔名統一為 manifest.json) -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- 2. iOS (Safari) PWA 支援標籤 -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="倉儲儀表板">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <!-- 3. 主題顏色 -->
+  <meta name="theme-color" content="#121212">
 
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -198,7 +210,7 @@
     <div class="top-left">
       <h1 style="margin:0; font-size: 18px;">🚚 倉儲管理儀表板</h1>
       <a href="/scan.html" class="btn btn-gold" target="_blank">📱 前往司機端 ↗</a>
-      <!-- ⬇️ 新增：過往紀錄按鈕 ⬇️ -->
+      <!-- 過往紀錄按鈕 -->
       <a href="/history.html" class="btn btn-outline" target="_blank">📜 查看過往紀錄 ↗</a>
       <span class="status-info" id="last-updated">更新時間：載入中...</span>
     </div>
@@ -422,6 +434,15 @@
             }
           }
         }
+      });
+    }
+
+    // Service Worker 註冊 (支援 PWA 離線/快取)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('SW 註冊成功'))
+          .catch(err => console.log('SW 註冊失敗或未建立 sw.js'));
       });
     }
 
