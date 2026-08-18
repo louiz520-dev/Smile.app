@@ -118,7 +118,7 @@ app.post('/api/auth/login', async (req, res) => {
           id: user._id,
           username: user.username,
           name: user.name,
-          role: user.role
+          role: user.role // 👈 供前端判斷 role 權限
         }
       });
     }
@@ -159,7 +159,7 @@ app.post('/api/auth/login', async (req, res) => {
             id: gsData.username,
             username: gsData.username,
             name: gsData.name,
-            role: userRole
+            role: userRole // 👈 供前端判斷 role 權限
           }
         });
       } else {
