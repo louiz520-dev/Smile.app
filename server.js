@@ -65,8 +65,8 @@ app.post('/api/auth/init-admin', async (req, res) => {
   }
 });
 
-// 2. [使用者/司機登入 API] (POST /api/auth/login) - 公開
-// 💡 支援 MongoDB 與 Google 試算表 (Accounts 分頁) 雙重驗證
+// 2. [通用/司機/後台登入 API] (POST /api/auth/login) - 公開
+// 💡 支援 MongoDB 與 Google 試算表 (Accounts 分頁) 雙重驗證，並依角色返回建議的導向路徑
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -98,17 +98,22 @@ app.post('/api/auth/login', async (req, res) => {
         return res.status(400).json({ success: false, message: '帳號或密碼錯誤！' });
       }
 
-      // 發放 JWT Token
+      // 發放 JWT Token (包含 role)
       const token = jwt.sign(
         { userId: user._id, username: user.username, role: user.role, name: user.name },
         process.env.JWT_SECRET || 'smile_wms_secret_key_2026_safe',
         { expiresIn: '30d' }
       );
 
+      // 判斷跳轉目標頁面
+      const isAdminRole = ['super_admin', 'admin', 'warehouse_manager'].includes(user.role);
+      const redirectUrl = isAdminRole ? '/index.html' : '/scan.html';
+
       return res.json({
         success: true,
         message: '登入成功！',
         token,
+        redirectUrl,
         user: {
           id: user._id,
           username: user.username,
@@ -135,22 +140,26 @@ app.post('/api/auth/login', async (req, res) => {
       const gsData = await gsResponse.json();
 
       if (gsData.status === 'success') {
-        // 從 Google 試算表驗證成功，同樣簽發 JWT Token 確保後續 API 能正常通過 authenticateToken
+        const userRole = gsData.role || 'driver';
         const token = jwt.sign(
-          { userId: gsData.username, username: gsData.username, role: gsData.role, name: gsData.name },
+          { userId: gsData.username, username: gsData.username, role: userRole, name: gsData.name },
           process.env.JWT_SECRET || 'smile_wms_secret_key_2026_safe',
           { expiresIn: '30d' }
         );
+
+        const isAdminRole = ['super_admin', 'admin', 'warehouse_manager'].includes(userRole);
+        const redirectUrl = isAdminRole ? '/index.html' : '/scan.html';
 
         return res.json({
           success: true,
           message: '登入成功！',
           token,
+          redirectUrl,
           user: {
             id: gsData.username,
             username: gsData.username,
             name: gsData.name,
-            role: gsData.role
+            role: userRole
           }
         });
       } else {
@@ -163,6 +172,98 @@ app.post('/api/auth/login', async (req, res) => {
 
   } catch (error) {
     console.error('登入失敗:', error);
+    res.status(500).json({ success: false, message: '伺服器錯誤，請稍後再試。' });
+  }
+});
+
+// 2.1 [專用：後台管理員登入 API] (POST /api/auth/admin-login) - 公開
+// 💡 強制檢驗角色，非管理者拒絕登入，防範司機帳號登入後台
+app.post('/api/auth/admin-login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: '請輸入管理員帳號與密碼！' });
+    }
+
+    let user = null;
+    if (mongoose.connection.readyState === 1) {
+      user = await User.findOne({ username });
+    }
+
+    if (user) {
+      if (!user.isActive) {
+        return res.status(403).json({ success: false, message: '此帳號已被停用。' });
+      }
+
+      // 權限過濾：非管理員權限直接阻擋
+      const isAdminRole = ['super_admin', 'admin', 'warehouse_manager'].includes(user.role);
+      if (!isAdminRole) {
+        return res.status(403).json({ success: false, message: '權限不足！此頁面僅限後台管理人員登入。' });
+      }
+
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: '帳號或密碼錯誤！' });
+      }
+
+      const token = jwt.sign(
+        { userId: user._id, username: user.username, role: user.role, name: user.name },
+        process.env.JWT_SECRET || 'smile_wms_secret_key_2026_safe',
+        { expiresIn: '30d' }
+      );
+
+      return res.json({
+        success: true,
+        message: '後台登入成功！',
+        token,
+        redirectUrl: '/index.html',
+        user: {
+          id: user._id,
+          username: user.username,
+          name: user.name,
+          role: user.role
+        }
+      });
+    }
+
+    // 後備 Google 試算表驗證
+    try {
+      const gsResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', username, password })
+      });
+      const gsData = await gsResponse.json();
+
+      if (gsData.status === 'success') {
+        const isAdminRole = ['super_admin', 'admin', 'warehouse_manager'].includes(gsData.role);
+        if (!isAdminRole) {
+          return res.status(403).json({ success: false, message: '權限不足！此頁面僅限後台管理人員登入。' });
+        }
+
+        const token = jwt.sign(
+          { userId: gsData.username, username: gsData.username, role: gsData.role, name: gsData.name },
+          process.env.JWT_SECRET || 'smile_wms_secret_key_2026_safe',
+          { expiresIn: '30d' }
+        );
+
+        return res.json({
+          success: true,
+          message: '後台登入成功！',
+          token,
+          redirectUrl: '/index.html',
+          user: { id: gsData.username, username: gsData.username, name: gsData.name, role: gsData.role }
+        });
+      } else {
+        return res.status(400).json({ success: false, message: gsData.message || '帳號或密碼錯誤！' });
+      }
+    } catch (err) {
+      return res.status(400).json({ success: false, message: '帳號或密碼錯誤！' });
+    }
+
+  } catch (error) {
+    console.error('後台登入失敗:', error);
     res.status(500).json({ success: false, message: '伺服器錯誤，請稍後再試。' });
   }
 });
@@ -209,7 +310,6 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
 // 🔒 5. [取得所有使用者清單 API] (GET /api/auth/users) - 管理者專用
 app.get('/api/auth/users', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
   try {
-    // 取得使用者資訊（排除密碼欄位）
     const users = await User.find({}, 'username name role isActive createdAt').sort({ createdAt: -1 });
     res.json({ success: true, users });
   } catch (error) {
@@ -232,7 +332,6 @@ app.put('/api/auth/reset-password', authenticateToken, authorizeRoles('super_adm
       return res.status(404).json({ success: false, message: '找不到該帳號！' });
     }
 
-    // 更新密碼 (User Model 的 pre('save') 會自動進行 bcrypt 加密)
     user.password = newPassword;
     await user.save();
 
@@ -314,11 +413,9 @@ function parsePalletString(palletData) {
 }
 
 // 🔒 1. 司機端提交 API (POST /api/scan) - 受保護
-// 自動使用 Token 解析出的 req.user.name 作為司機名稱，防篡改
 app.post('/api/scan', authenticateToken, async (req, res) => {
   try {
     const { barcode, status, pallets } = req.body;
-    // 💡 直接使用 Token 帶過來的司機姓名，若未帶則降級用前端傳來的 driver
     const driver = req.user?.name || req.body.driver || '未知司機';
 
     if (!barcode || !pallets || !Array.isArray(pallets) || pallets.length === 0) {
@@ -340,8 +437,8 @@ app.post('/api/scan', authenticateToken, async (req, res) => {
   }
 });
 
-// 🔒 2. 後台動態分析 API (GET /api/analytics) - 受保護
-app.get('/api/analytics', authenticateToken, async (req, res) => {
+// 🔒 2. 後台動態分析 API (GET /api/analytics) - 受保護 (僅限管理者/倉管)
+app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
   try {
     const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
     const responseText = await sheetResponse.text();
@@ -423,8 +520,8 @@ app.get('/api/analytics', authenticateToken, async (req, res) => {
   }
 });
 
-// 🔒 3. 讀取所有歷史紀錄 API (GET /api/records) - 受保護
-app.get('/api/records', authenticateToken, async (req, res) => {
+// 🔒 3. 讀取所有歷史紀錄 API (GET /api/records) - 受保護 (僅限管理者/倉管)
+app.get('/api/records', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
   try {
     const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
     const rawRecords = await sheetResponse.json();

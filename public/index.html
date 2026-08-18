@@ -11,21 +11,18 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
   
-  <!-- 1. Web App Manifest -->
+  <!-- Web App Manifest & iOS PWA -->
   <link rel="manifest" href="manifest.json">
-
-  <!-- 2. iOS (Safari) PWA 支援標籤 -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="倉儲儀表板">
   <link rel="apple-touch-icon" href="icon-192.png">
-
-  <!-- 3. 主題顏色 -->
   <meta name="theme-color" content="#121212">
 
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
   <style>
     :root {
       --bg-dark: #121212;
@@ -71,6 +68,7 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      flex-wrap: wrap;
     }
     .status-info {
       font-size: 12px;
@@ -86,6 +84,7 @@
       padding: 6px 10px;
       border-radius: 8px;
       border: 1px solid #444;
+      flex-wrap: wrap;
     }
     .driver-generator input {
       background: var(--bg-dark);
@@ -190,7 +189,7 @@
     tr:nth-child(even) { background-color: rgba(255, 255, 255, 0.02); }
     tr:hover { background-color: rgba(212, 175, 55, 0.05); }
 
-    /* 狀態與棧板標籤 (Badge) */
+    /* 狀態與棧板標籤 */
     .badge {
       background: rgba(212, 175, 55, 0.2);
       color: #F1D279;
@@ -256,7 +255,6 @@
       <h1 style="margin:0; font-size: 18px;">🚚 倉儲管理儀表板</h1>
       <span id="user-role-badge" class="badge" style="display:none;">---</span>
       <a href="/scan.html" class="btn btn-gold" target="_blank">📱 前往司機端 ↗</a>
-      <!-- 過往紀錄按鈕 -->
       <a href="/history.html" class="btn btn-outline" target="_blank">📜 查看過往紀錄 ↗</a>
       <span class="status-info" id="last-updated">更新時間：載入中...</span>
     </div>
@@ -309,7 +307,7 @@
     </div>
   </div>
 
-  <!-- 🔐 高階管理員專用：帳號與權限管理中心 (預設隱藏) -->
+  <!-- 🔐 高階管理員專用：帳號與權限管理中心 -->
   <div class="card" id="admin-panel" style="display: none;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
       <h2>🔐 帳號與權限管理中心 (高階管理員專用)</h2>
@@ -355,6 +353,7 @@
         <select id="new-role">
           <option value="driver">司機 (driver)</option>
           <option value="warehouse_manager">倉管人員 (warehouse_manager)</option>
+          <option value="admin">管理員 (admin)</option>
           <option value="super_admin">高階管理員 (super_admin)</option>
         </select>
       </div>
@@ -369,62 +368,69 @@
     let dailyChart = null;
     let stockChart = null;
     let isFetching = false;
-    let currentUser = null;
 
-    // 1. 權限檢查與初始化
-    async function initAuth() {
-      try {
-        const res = await fetch('/api/auth/me');
-        if (!res.ok) {
-          window.location.href = '/login.html';
-          return;
-        }
-        currentUser = await res.json();
-
-        // 若為司機則禁止存取後台，重導向至掃碼頁
-        if (currentUser.role === 'driver') {
-          alert('司機帳號無權存取儀表板');
-          window.location.href = `/scan.html?driver=${encodeURIComponent(currentUser.name)}`;
-          return;
-        }
-
-        // 更新 UI 上的使用者資訊
-        document.getElementById('current-user-display').innerText = `使用者：${currentUser.name}`;
-        
-        // 若為高階管理員，顯示管理者專用區塊與 Badge
-        if (currentUser.role === 'super_admin') {
-          const badge = document.getElementById('user-role-badge');
-          badge.innerText = '👑 高階管理員';
-          badge.style.display = 'inline-block';
-          document.getElementById('admin-panel').style.display = 'block';
-          fetchUsersList();
-        } else if (currentUser.role === 'warehouse_manager') {
-          const badge = document.getElementById('user-role-badge');
-          badge.innerText = '📦 倉管人員';
-          badge.style.display = 'inline-block';
-        }
-
-        // 初始化圖表與明細
-        fetchAnalytics();
-        setInterval(fetchAnalytics, 10000);
-
-      } catch (err) {
-        console.error('身份驗證失敗:', err);
-        window.location.href = '/login.html';
-      }
+    // 取得帶有 Authorization Header 的 API Request Helper
+    function getAuthHeaders() {
+      const token = localStorage.getItem('token');
+      return {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
     }
 
-    // 登出
-    async function logout() {
-      try {
-        await fetch('/api/auth/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-      } catch (err) {
-        window.location.href = '/login.html';
-      }
+    // HTML 安全轉義
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
-    // 取得司機專屬連結
+    // 1. 權限檢查與初始化 (使用 localStorage)
+    function checkAuth() {
+      const token = localStorage.getItem('token');
+      const userRole = localStorage.getItem('userRole');
+      const userName = localStorage.getItem('userName') || '使用者';
+
+      // 前端基本 Token 與角色權限攔截
+      if (!token || !['super_admin', 'admin', 'warehouse_manager'].includes(userRole)) {
+        window.location.href = '/admin-login.html';
+        return false;
+      }
+
+      // 顯示目前使用者
+      document.getElementById('current-user-display').innerText = `使用者：${userName}`;
+
+      // 角色 Badge 顯示與控制管理面板
+      const badge = document.getElementById('user-role-badge');
+      if (userRole === 'super_admin' || userRole === 'admin') {
+        badge.innerText = userRole === 'super_admin' ? '👑 高階管理員' : '⚙️ 管理員';
+        badge.style.display = 'inline-block';
+        document.getElementById('admin-panel').style.display = 'block';
+        fetchUsersList();
+      } else if (userRole === 'warehouse_manager') {
+        badge.innerText = '📦 倉管人員';
+        badge.style.display = 'inline-block';
+      }
+
+      fetchAnalytics();
+      setInterval(fetchAnalytics, 10000);
+      return true;
+    }
+
+    // 登出邏輯
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('userName');
+      localStorage.removeItem('userId');
+      window.location.href = '/admin-login.html';
+    }
+
+    // 司機連結產生
     function getDriverUrl() {
       const name = document.getElementById('driver-input').value.trim() || '司機';
       return `${window.location.origin}/scan.html?driver=${encodeURIComponent(name)}`;
@@ -436,40 +442,38 @@
 
     function copyDriverLink() {
       const url = getDriverUrl();
-      navigator.clipboard.writeText(url)
-        .then(() => alert(`✅ 已複製司機專屬連結：\n${url}`))
-        .catch(() => prompt("請複製下方連結：", url));
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(url)
+          .then(() => alert(`✅ 已複製司機專屬連結：\n${url}`))
+          .catch(() => prompt("請複製下方連結：", url));
+      } else {
+        prompt("請複製下方連結：", url);
+      }
     }
 
-    // 文字轉義，防止 XSS 攻擊
-    function escapeHtml(str) {
-      if (!str) return '';
-      return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-
-    // 主資料抓取與渲染函式
+    // 2. 抓取與渲染數據 (帶 JWT Token)
     async function fetchAnalytics() {
       if (isFetching) return;
       isFetching = true;
 
       try {
-        const res = await fetch('/api/analytics');
+        const res = await fetch('/api/analytics', {
+          headers: getAuthHeaders()
+        });
+
+        // 若 Token 失效或過期
+        if (res.status === 401 || res.status === 403) {
+          alert('登入已過期或權限不足，請重新登入');
+          logout();
+          return;
+        }
+
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
 
-        // 0. 更新最後整理時間
-        const nowStr = new Date().toLocaleTimeString();
-        document.getElementById('last-updated').innerText = `最後更新：${nowStr}`;
+        document.getElementById('last-updated').innerText = `最後更新：${new Date().toLocaleTimeString()}`;
 
-        // 1. 渲染今日明細表格 (安全 DOM 操作)
         renderTable(data.todayRecords || []);
-
-        // 2. 渲染長條圖與圓餅圖
         renderDailyChart(data.dailyInMap || {}, data.dailyOutMap || {});
         renderStockChart(data.stockMap || {});
 
@@ -481,12 +485,12 @@
       }
     }
 
-    // 渲染表格內容
+    // 渲染紀錄表格
     function renderTable(records) {
       const tbody = document.getElementById('today-table');
       tbody.innerHTML = '';
 
-      if (records.length === 0) {
+      if (!records || records.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">今日尚無作業紀錄</td></tr>';
         return;
       }
@@ -495,12 +499,9 @@
 
       records.forEach(r => {
         const tr = document.createElement('tr');
-
-        // 格式化時間
         const timeStr = r.created_at ? new Date(r.created_at).toLocaleTimeString() : '--:--:--';
-
-        // 處理棧板明細 Badge
         const pallets = Array.isArray(r.pallets) ? r.pallets : [];
+        
         let palletsHtml = '無棧板資訊';
         if (pallets.length > 0) {
           palletsHtml = pallets.map(p => {
@@ -511,7 +512,6 @@
           }).join(' ');
         }
 
-        // 動態狀態標籤 (進倉 / 出倉)
         const statusText = escapeHtml(r.status || '未知');
         let statusClass = 'status-badge';
         if (statusText.includes('進') || statusText.includes('入')) statusClass += ' status-in';
@@ -531,7 +531,7 @@
       tbody.appendChild(fragment);
     }
 
-    // 渲染今日進出長條圖
+    // 進出長條圖
     function renderDailyChart(dailyInMap, dailyOutMap) {
       const palletKeys = Array.from(new Set([...Object.keys(dailyInMap), ...Object.keys(dailyOutMap)]));
       const inCounts = palletKeys.map(k => dailyInMap[k] || 0);
@@ -563,7 +563,7 @@
       });
     }
 
-    // 渲染庫存圓餅圖
+    // 庫存圓餅圖
     function renderStockChart(stockMap) {
       const stockKeys = Object.keys(stockMap);
       const stockValues = stockKeys.map(k => stockMap[k]);
@@ -595,41 +595,66 @@
       });
     }
 
-    // --- 🔐 高階管理員功能：帳號管理 ---
+    // 3. 帳號管理功能 (帶 JWT Token)
     async function fetchUsersList() {
       try {
-        const res = await fetch('/api/admin/users');
+        const res = await fetch('/api/admin/users', {
+          headers: getAuthHeaders()
+        });
         if (!res.ok) return;
         const users = await res.json();
         
         const tbody = document.getElementById('users-table-body');
         tbody.innerHTML = '';
 
+        const roleMap = {
+          'driver': '司機',
+          'warehouse_manager': '倉管人員',
+          'admin': '管理員',
+          'super_admin': '👑 高階管理員'
+        };
+
+        const currentUserId = localStorage.getItem('userId');
+
         users.forEach(u => {
           const tr = document.createElement('tr');
-          const isSelf = currentUser && currentUser.id === u.id;
+          const isSelf = currentUserId && String(currentUserId) === String(u.id);
           const statusText = u.is_active ? '🟢 正常' : '🔴 停用';
-          const roleMap = {
-            'driver': '司機',
-            'warehouse_manager': '倉管人員',
-            'super_admin': '👑 高階管理員'
-          };
 
           tr.innerHTML = `
             <td><strong>${escapeHtml(u.name)}</strong></td>
             <td><code>${escapeHtml(u.username)}</code></td>
-            <td><span class="badge">${roleMap[u.role] || u.role}</span></td>
+            <td><span class="badge">${roleMap[u.role] || escapeHtml(u.role)}</span></td>
             <td>${statusText}</td>
             <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
-            <td>
-              <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px;" onclick="resetPassword(${u.id}, '${escapeHtml(u.name)}')">🔑 重置密碼</button>
-              ${!isSelf ? `
-                <button class="btn ${u.is_active ? 'btn-danger' : 'btn-gold'}" style="padding: 3px 8px; font-size: 11px;" onclick="toggleUserStatus(${u.id}, ${!u.is_active})">
-                  ${u.is_active ? '停用' : '啟用'}
-                </button>
-              ` : '<span style="font-size:11px; color:#888;">(當前帳號)</span>'}
-            </td>
+            <td class="action-td"></td>
           `;
+
+          const actionTd = tr.querySelector('.action-td');
+          
+          // 重置密碼按鈕
+          const resetBtn = document.createElement('button');
+          resetBtn.className = 'btn btn-outline';
+          resetBtn.style.cssText = 'padding: 3px 8px; font-size: 11px; margin-right: 4px;';
+          resetBtn.innerText = '🔑 重置密碼';
+          resetBtn.onclick = () => resetPassword(u.id, u.name);
+          actionTd.appendChild(resetBtn);
+
+          // 啟用/停用按鈕
+          if (!isSelf) {
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = u.is_active ? 'btn btn-danger' : 'btn btn-gold';
+            toggleBtn.style.cssText = 'padding: 3px 8px; font-size: 11px;';
+            toggleBtn.innerText = u.is_active ? '停用' : '啟用';
+            toggleBtn.onclick = () => toggleUserStatus(u.id, !u.is_active);
+            actionTd.appendChild(toggleBtn);
+          } else {
+            const selfSpan = document.createElement('span');
+            selfSpan.style.cssText = 'font-size:11px; color:#888;';
+            selfSpan.innerText = '(當前帳號)';
+            actionTd.appendChild(selfSpan);
+          }
+
           tbody.appendChild(tr);
         });
       } catch (err) {
@@ -662,7 +687,7 @@
       try {
         const res = await fetch('/api/admin/users', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ name, username, password, role })
         });
         const data = await res.json();
@@ -685,7 +710,7 @@
       try {
         const res = await fetch(`/api/admin/users/${userId}/reset-password`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ newPassword })
         });
         if (res.ok) {
@@ -706,7 +731,7 @@
       try {
         const res = await fetch(`/api/admin/users/${userId}/status`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ is_active: isActive })
         });
         if (res.ok) {
@@ -719,17 +744,17 @@
       }
     }
 
-    // Service Worker 註冊 (支援 PWA 離線/快取)
+    // Service Worker 註冊
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('SW 註冊成功'))
-          .catch(err => console.log('SW 註冊失敗或未建立 sw.js'));
+          .then(() => console.log('SW 註冊成功'))
+          .catch(() => console.log('SW 註冊失敗或未建立 sw.js'));
       });
     }
 
-    // 啟動身分驗證與初始化
-    initAuth();
+    // 啟動初始化檢查
+    checkAuth();
   </script>
 </body>
 </html>

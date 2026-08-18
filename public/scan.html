@@ -413,9 +413,11 @@
     // 🔒 1. 頁面載入與身份驗證 (checkAuth)
     function checkAuth() {
       token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      if (!token) {
-        alert("⚠️ 尚未登入或登入逾期，請重新登入！");
-        window.location.href = 'login.html';
+      const userRole = localStorage.getItem('userRole') || sessionStorage.getItem('userRole');
+
+      if (!token || userRole !== 'driver') {
+        alert('請先登入司機帳號！');
+        window.location.href = '/login.html';
         return;
       }
 
@@ -433,10 +435,12 @@
     // 🚪 2. 安全登出機制
     function logout() {
       localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
       localStorage.removeItem('driverName');
       sessionStorage.removeItem('token');
+      sessionStorage.removeItem('userRole');
       sessionStorage.removeItem('driverName');
-      window.location.href = 'login.html';
+      window.location.href = '/login.html';
     }
 
     // 執行身份驗證
