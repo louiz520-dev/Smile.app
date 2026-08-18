@@ -67,8 +67,19 @@
         .btn-login:hover {
             background-color: #0056b3;
         }
+        .btn-login:disabled {
+            background-color: #a0c7ff;
+            cursor: not-allowed;
+        }
         .error-msg {
             color: #dc3545;
+            font-size: 14px;
+            text-align: center;
+            margin-top: 15px;
+            display: none;
+        }
+        .success-msg {
+            color: #28a745;
             font-size: 14px;
             text-align: center;
             margin-top: 15px;
@@ -82,41 +93,129 @@
     <div class="login-title">🚛 司機端系統登入</div>
     <form id="loginForm">
         <div class="form-group">
-            <label for="driverName">司機帳號 / 姓名</label>
-            <input type="text" id="driverName" placeholder="請輸入姓名 (例: 王小明)" required>
+            <label for="username">司機帳號</label>
+            <input type="text" id="username" name="username" autocomplete="username" placeholder="請輸入帳號" required>
         </div>
         <div class="form-group">
             <label for="password">登入密碼</label>
-            <input type="password" id="password" placeholder="請輸入密碼" required>
+            <input type="password" id="password" name="password" autocomplete="current-password" placeholder="請輸入密碼" required>
         </div>
-        <button type="submit" class="btn-login">登入系統</button>
-        <div id="errorMsg" class="error-msg">帳號或密碼錯誤！</div>
+        <button type="submit" id="submitBtn" class="btn-login">登入系統</button>
+        <div id="errorMsg" class="error-msg"></div>
+        <div id="successMsg" class="success-msg">✅ 登入成功，正在跳轉...</div>
     </form>
 </div>
 
 <script>
-    // 預設的司機密碼（若需簡易防護可在前端設定，或依您需要與後端 GAS 對接）
-    const DEFAULT_PASSWORD = "123"; 
+    // Node.js server.js 的登入 API 進入點
+    const API_URL = '/api/auth/login';
 
-    document.getElementById('loginForm').addEventListener('submit', function(e) {
+    // 根據角色執行頁面重導向
+    function handleRoleRedirect(role) {
+        if (role === 'admin' || role === 'super_admin' || role === 'warehouse_manager') {
+            window.location.href = 'admin.html';
+        } else {
+            window.location.href = 'scan.html';
+        }
+    }
+
+    // 初始化：檢查本地端登入狀態 (必須帶有有效的 token)
+    function checkAutoLogin() {
+        const token = localStorage.getItem('token');
+        const storedUser = localStorage.getItem('user');
+
+        if (token && storedUser) {
+            try {
+                const user = JSON.parse(storedUser);
+                if (user && user.role) {
+                    handleRoleRedirect(user.role);
+                }
+            } catch (e) {
+                // 若解析失敗則清空快取
+                localStorage.clear();
+                sessionStorage.clear();
+            }
+        }
+    }
+
+    // 處理登入表單提交
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        const driverName = document.getElementById('driverName').value.trim();
+        const username = document.getElementById('username').value.trim();
         const password = document.getElementById('password').value.trim();
+        const submitBtn = document.getElementById('submitBtn');
         const errorMsg = document.getElementById('errorMsg');
+        const successMsg = document.getElementById('successMsg');
 
-        // 簡單驗證邏輯：可設定統一密碼，或是讓密碼不為空即可
-        if (password === DEFAULT_PASSWORD || password !== "") {
-            // 1. 將登入狀態記在瀏覽器 LocalStorage 中，保持登入狀態
-            localStorage.setItem('driverUser', driverName);
-            localStorage.setItem('isDriverLoggedIn', 'true');
+        if (!username || !password) return;
 
-            // 2. 自動跳轉至掃描頁面，並帶上 user 參數
-            window.location.href = `scan.html?user=${encodeURIComponent(driverName)}`;
-        } else {
+        // 重置 UI 狀態
+        errorMsg.style.display = 'none';
+        successMsg.style.display = 'none';
+        submitBtn.disabled = true;
+        submitBtn.innerText = '驗證中...';
+
+        try {
+            // 發送 JSON 請求至 Node.js API
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
+            });
+
+            const data = await response.json();
+
+            // Node.js API 成功回傳 (HTTP 200 & success === true)
+            if (response.ok && data.success) {
+                const userObj = {
+                    username: data.user.username,
+                    name: data.user.name,
+                    role: data.user.role
+                };
+
+                // 1. 儲存 JWT Token (API 驗證核心)
+                localStorage.setItem('token', data.token);
+
+                // 2. 儲存相容於原系統的 Driver 與 User 狀態
+                localStorage.setItem('driverName', data.user.name || data.user.username);
+                localStorage.setItem('driverUsername', data.user.username);
+                localStorage.setItem('user', JSON.stringify(userObj));
+
+                // 3. 若為管理者，一併更新 sessionStorage 以保持向後相容
+                if (data.user.role === 'admin' || data.user.role === 'super_admin' || data.user.role === 'warehouse_manager') {
+                    sessionStorage.setItem('adminUser', data.user.username);
+                }
+
+                successMsg.style.display = 'block';
+
+                setTimeout(() => {
+                    handleRoleRedirect(data.user.role);
+                }, 600);
+
+            } else {
+                // 顯示 Node.js 回傳的錯誤訊息
+                errorMsg.innerText = data.message || '登入失敗，請檢查帳號密碼！';
+                errorMsg.style.display = 'block';
+            }
+
+        } catch (error) {
+            console.error('登入請求失敗:', error);
+            errorMsg.innerText = '❌ 伺服器連線失敗，請檢查網路狀態！';
             errorMsg.style.display = 'block';
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = '登入系統';
         }
     });
+
+    // 頁面載入時檢查自動登入狀態
+    checkAutoLogin();
 </script>
 
 </body>

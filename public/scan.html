@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-title" content="司機端掃碼">
   <link rel="apple-touch-icon" href="icon-192.png">
   
-  <!-- 3. 主題顏色 (深色模式主題色) -->
+  <!-- 3. 主題顏色 -->
   <meta name="theme-color" content="#121212">
 
   <title>司機端 - 倉儲掃碼與棧板數量登載</title>
@@ -32,28 +32,45 @@
       margin-bottom: 20px; box-sizing: border-box; border: 1px solid #333;
     }
     .gold-text { color: #D4AF37; }
+    .driver-header { display: flex; justify-content: space-between; align-items: center; }
+    .btn-logout { background: transparent; border: 1px solid #FF6B6B; color: #FF6B6B; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .btn-logout:hover { background: rgba(255,107,107,0.1); }
     #status-msg { color: #AAAAAA; font-size: 14px; margin-top: 8px; word-wrap: break-word; }
     #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; display: none; margin-top: 15px; border: 2px solid #D4AF37; }
-    input[type="text"], select {
+    input[type="text"], input[type="number"], select {
       width: 100%; padding: 12px; margin: 6px 0 12px 0; box-sizing: border-box;
       background-color: #2C2C2C; border: 1px solid #444; border-radius: 8px; color: #FFFFFF; font-size: 15px;
     }
-    input[type="text"]:focus, select:focus { outline: none; border-color: #D4AF37; }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus { outline: none; border-color: #D4AF37; }
     
     .pallet-item {
       background: #2A2A2A; padding: 12px; border-radius: 10px; margin-bottom: 10px;
-      border: 1px solid #3D3D3D;
+      border: 1px solid #3D3D3D; transition: all 0.2s ease-in-out;
     }
     .pallet-row { display: flex; align-items: center; justify-content: space-between; }
     .pallet-label { display: flex; align-items: center; cursor: pointer; font-size: 15px; font-weight: 500; }
     .pallet-label input[type="checkbox"] { margin-right: 10px; transform: scale(1.3); accent-color: #D4AF37; }
     
+    .pallet-red-theme {
+      border: 1px solid #FF4D4D !important;
+      background: #2D1A1A !important;
+      box-shadow: 0 0 10px rgba(255, 77, 77, 0.2);
+    }
+    .pallet-red-theme .pallet-label { color: #FF6B6B; font-weight: bold; }
+    .pallet-red-theme input[type="checkbox"] { accent-color: #FF4D4D !important; }
+    .pallet-red-theme .qty-btn { color: #FF6B6B !important; border-color: #883333 !important; }
+    .pallet-red-theme .qty-input { color: #FF6B6B !important; }
+    .pallet-red-theme .sub-option-box { border-left-color: #FF4D4D !important; }
+    .pallet-red-theme .sub-option-box label { color: #FF6B6B !important; }
+
     .qty-counter { display: none; align-items: center; gap: 5px; }
     .qty-btn {
       background: #383838; color: #D4AF37; border: 1px solid #555;
       width: 32px; height: 32px; border-radius: 6px; font-size: 18px; font-weight: bold;
       display: flex; align-items: center; justify-content: center; cursor: pointer;
+      user-select: none;
     }
+    .qty-btn:active { background: #555; }
     .qty-input {
       width: 50px !important; text-align: center; margin: 0 !important; padding: 6px !important;
       font-weight: bold; font-size: 16px; color: #D4AF37 !important;
@@ -75,9 +92,10 @@
     .btn {
       width: 100%; padding: 16px; font-size: 16px; font-weight: bold; border: none;
       border-radius: 8px; cursor: pointer; text-transform: uppercase; margin-bottom: 10px;
+      transition: background 0.2s, opacity 0.2s;
     }
     .btn-gold { background: linear-gradient(135deg, #D4AF37 0%, #F1D279 100%); color: #121212; }
-    .btn-gold:disabled { background: #555555; color: #888888; cursor: not-allowed; }
+    .btn-gold:disabled { background: #555555 !important; color: #888888 !important; cursor: not-allowed; }
     .btn-outline { background: transparent; color: #D4AF37; border: 1px solid #D4AF37; }
     .btn-danger { background-color: #333; color: #FF6B6B; border: 1px solid #555; }
     #print-area { display: none; background: #FFF; color: #000; padding: 15px; border-radius: 8px; margin-top: 15px; text-align: center; }
@@ -94,7 +112,10 @@
 <body>
 
   <div class="card">
-    <h2 id="driver-info">👤 司機：<span class="gold-text">載入中...</span></h2>
+    <div class="driver-header">
+      <h2 id="driver-info" style="margin:0;">👤 司機：<span class="gold-text">驗證中...</span></h2>
+      <button class="btn-logout" onclick="logout()">安全登出</button>
+    </div>
     <div id="status-msg">系統狀態：準備就緒</div>
   </div>
 
@@ -115,7 +136,7 @@
 
     <div class="pallet-container">
       <!-- 1. 中華紅板 -->
-      <div class="pallet-item">
+      <div class="pallet-item" id="item-red">
         <div class="pallet-row">
           <label class="pallet-label">
             <input type="checkbox" class="p-check" data-id="red" onchange="togglePalletItem('red')">
@@ -354,7 +375,7 @@
       </div>
     </div>
 
-    <button id="btn-submit" class="btn btn-gold" style="margin-top:15px;" onclick="submitData()">確認送出紀錄</button>
+    <button id="btn-submit" class="btn btn-gold" style="margin-top:20px;" onclick="submitData()">確認送出紀錄</button>
     <button class="btn btn-outline" onclick="generateQRLabel()">🖨️ 產生 QR 標籤貼紙</button>
 
     <div id="print-area">
@@ -369,20 +390,57 @@
   </div>
 
   <script>
-    // 🔍 檢查與獲取司機名字
-    const urlParams = new URLSearchParams(window.location.search);
-    let driverName = urlParams.get('user') || urlParams.get('driver') || localStorage.getItem('driverName');
+    // 🌐 全域後端 API 位置 (請調整為實際的 Node.js 後端伺服器網址)
+    const API_BASE_URL = 'http://localhost:3000/api';
 
-    // ⚠️ 未登入判斷：若找不到司機名稱，直接強制跳轉至登入頁面 login.html
-    if (!driverName) {
-      alert("⚠️ 尚未登入，請先登入司機帳號！");
-      window.location.href = 'login.html';
-    } else {
-      localStorage.setItem('driverName', driverName);
+    let token = '';
+    let driverName = '';
+
+    // 解析 JWT payload (解碼用戶名稱)
+    function parseJwt(token) {
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(c => {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        return null;
+      }
     }
 
-    // 渲染司機名稱至介面
-    document.getElementById('driver-info').innerHTML = `👤 司機：<span class="gold-text">${driverName}</span>`;
+    // 🔒 1. 頁面載入與身份驗證 (checkAuth)
+    function checkAuth() {
+      token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (!token) {
+        alert("⚠️ 尚未登入或登入逾期，請重新登入！");
+        window.location.href = 'login.html';
+        return;
+      }
+
+      const decoded = parseJwt(token);
+      if (!decoded || (decoded.exp && decoded.exp * 1000 < Date.now())) {
+        alert("⚠️ 驗證令牌已失效，請重新登入！");
+        logout();
+        return;
+      }
+
+      driverName = decoded.name || decoded.username || decoded.driver || '司機';
+      document.getElementById('driver-info').innerHTML = `👤 司機：<span class="gold-text">${driverName}</span>`;
+    }
+
+    // 🚪 2. 安全登出機制
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('driverName');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('driverName');
+      window.location.href = 'login.html';
+    }
+
+    // 執行身份驗證
+    checkAuth();
 
     let html5QrcodeScanner = null;
     let isScanning = false;
@@ -391,6 +449,15 @@
       const cb = document.querySelector(`.p-check[data-id="${id}"]`);
       const qtyBox = document.getElementById(`qty-box-${id}`);
       const subBox = document.getElementById(`sub-${id}`);
+
+      if (id === 'red') {
+        const itemRed = document.getElementById('item-red');
+        if (cb && cb.checked) {
+          itemRed.classList.add('pallet-red-theme');
+        } else {
+          itemRed.classList.remove('pallet-red-theme');
+        }
+      }
 
       if (cb && cb.checked) {
         if (qtyBox) qtyBox.style.display = 'flex';
@@ -405,7 +472,7 @@
     function changeQty(inputId, delta) {
       const input = document.getElementById(inputId);
       if (!input) return;
-      let val = parseInt(input.value) || 1;
+      let val = parseInt(input.value, 10) || 1;
       val += delta;
       if (val < 1) val = 1;
       input.value = val;
@@ -418,7 +485,7 @@
       checkedBoxes.forEach(cb => {
         const id = cb.getAttribute('data-id');
         const qtyInput = document.getElementById(`input-qty-${id}`);
-        const qty = qtyInput ? (parseInt(qtyInput.value) || 1) : 1;
+        const qty = qtyInput ? (parseInt(qtyInput.value, 10) || 1) : 1;
         total += qty;
       });
       document.getElementById('total-pallet-count').innerText = `總計：${total} 板`;
@@ -433,10 +500,8 @@
     }
 
     function handleStatusChange(activeSubId) {
-      document.querySelectorAll('.sub-option-box').forEach(box => {
-        if (!box.id.startsWith('sub-red') && !box.id.startsWith('sub-px') && !box.id.startsWith('sub-green')) {
-          box.style.display = 'none';
-        }
+      document.querySelectorAll('.status-group .sub-option-box').forEach(box => {
+        box.style.display = 'none';
       });
       if (activeSubId !== 'none') {
         const activeBox = document.getElementById(activeSubId);
@@ -451,7 +516,7 @@
       checkedBoxes.forEach(cb => {
         const id = cb.getAttribute('data-id');
         const qtyInput = document.getElementById(`input-qty-${id}`);
-        const count = qtyInput ? (parseInt(qtyInput.value) || 1) : 1;
+        const count = qtyInput ? (parseInt(qtyInput.value, 10) || 1) : 1;
         let name = '';
 
         if (id === 'red') {
@@ -550,12 +615,16 @@
             document.getElementById('barcode-input').value = decodedText;
             statusMsg.innerHTML = `✅ 成功讀取：<span class="gold-text">${decodedText}</span>`;
             if (navigator.vibrate) navigator.vibrate(100);
-            toggleCamera();
+            forceCloseCamera();
           },
           () => {}
-        ).then(() => statusMsg.innerText = "📷 相機運作中，請對準條碼")
-         .catch(err => { alert("無法存取相機！"); forceCloseCamera(); });
-        isScanning = true;
+        ).then(() => {
+          statusMsg.innerText = "📷 相機運作中，請對準條碼";
+          isScanning = true;
+        }).catch(err => { 
+          alert("無法存取相機！請確認已授予相機使用權限。"); 
+          forceCloseCamera(); 
+        });
       } else {
         forceCloseCamera();
       }
@@ -564,19 +633,25 @@
     function forceCloseCamera() {
       const readerElem = document.getElementById('reader');
       const btn = document.getElementById('btn-toggle-cam');
-      if (html5QrcodeScanner) {
-        html5QrcodeScanner.stop().then(() => { html5QrcodeScanner.clear(); resetCamUI(); }).catch(() => resetCamUI());
-      } else { resetCamUI(); }
       
-      function resetCamUI() {
+      const resetCamUI = () => {
         readerElem.style.display = "none";
         btn.innerText = "開啟相機掃描";
         btn.className = "btn btn-gold";
         isScanning = false;
+        html5QrcodeScanner = null;
+      };
+
+      if (html5QrcodeScanner) {
+        html5QrcodeScanner.stop().then(() => {
+          html5QrcodeScanner.clear();
+          resetCamUI();
+        }).catch(() => resetCamUI());
+      } else { 
+        resetCamUI(); 
       }
     }
 
-    // 重置表單狀態
     function resetForm() {
       document.getElementById('barcode-input').value = '';
       
@@ -593,6 +668,9 @@
         if (qtyInput) qtyInput.value = 1;
       });
 
+      const itemRed = document.getElementById('item-red');
+      if (itemRed) itemRed.classList.remove('pallet-red-theme');
+
       const defaultRadio = document.querySelector('input[name="main_status"][value="卸貨/入倉"]');
       if (defaultRadio) defaultRadio.checked = true;
       handleStatusChange('none');
@@ -600,6 +678,7 @@
       updateTotalPallets();
     }
 
+    // 🔑 3. 掃碼提交攜帶 Bearer Token 送至 Node.js 後端
     async function submitData() {
       const barcode = document.getElementById('barcode-input').value.trim();
       const statusMsg = document.getElementById('status-msg');
@@ -610,38 +689,43 @@
       if (!barcode) { alert("請輸入或掃描條碼！"); return; }
       if (pallets.length === 0) { alert("請至少勾選一種棧板種類！"); return; }
 
-      // 防重複點擊：禁用按鈕並更新狀態
       submitBtn.disabled = true;
       submitBtn.innerText = "⏳ 上傳中，請稍候...";
       statusMsg.innerHTML = "⏳ 資料寫入中...";
 
-      const gasUrl = 'https://script.google.com/macros/s/AKfycbxnsJ34G9EV0dlNMsQBezIKaHQHnICvUI-eR_wRwYGfFb1HPDT-Qck5ElPxF8hCf9iEHw/exec';
-
       try {
-        const response = await fetch(gasUrl, {
+        const response = await fetch(`${API_BASE_URL}/scan`, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` // 攜帶 JWT 認證 Header
+          },
           body: JSON.stringify({
-            driver: driverName,
             barcode: barcode,
             status: finalStatus,
             pallets: pallets
           })
         });
 
+        // 若驗證失效 (401 / 403)
+        if (response.status === 401 || response.status === 403) {
+          alert("⚠️ 登入已失效，請重新登入！");
+          logout();
+          return;
+        }
+
         const result = await response.json();
-        if (result.status === 'success' || result.result === 'success') {
+        if (response.ok && (result.status === 'success' || result.success)) {
           const summaryStr = pallets.map(p => `${p.name}x${p.count}`).join(', ');
           statusMsg.innerHTML = `🎉 <span class="gold-text">${barcode}</span> 送出成功！[${summaryStr}]`;
           if (navigator.vibrate) navigator.vibrate(100);
-          resetForm(); // 送出成功後自動清空表單
+          resetForm();
         } else {
-          statusMsg.innerText = `❌ 上傳失敗：${result.message || result.error || '資料庫寫入錯誤'}`;
+          statusMsg.innerText = `❌ 上傳失敗：${result.message || result.error || '伺服器拒絕寫入'}`;
         }
       } catch (error) {
         statusMsg.innerText = "❌ 伺服器連線異常，請檢查網路狀態";
       } finally {
-        // 解鎖按鈕
         submitBtn.disabled = false;
         submitBtn.innerText = "確認送出紀錄";
       }
