@@ -53,7 +53,7 @@ app.post('/api/auth/init-admin', async (req, res) => {
       username: 'admin',
       password: 'adminpassword123',
       name: '系統管理員',
-      role: 'super_admin', // 💡 升級：初始化角色為最高階管理員 (super_admin)
+      role: 'admin', // 💡 升級：初始化角色為最高階管理員 (super_admin)
       isActive: true
     });
 
