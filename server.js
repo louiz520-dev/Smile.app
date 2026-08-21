@@ -53,7 +53,7 @@ app.post('/api/auth/init-admin', async (req, res) => {
       username: 'admin',
       password: 'adminpassword123',
       name: '系統管理員',
-      role: 'admin', // 💡 升級：初始化角色為最高階管理員 (super_admin)
+      role: 'admin',
       isActive: true
     });
 
@@ -66,7 +66,6 @@ app.post('/api/auth/init-admin', async (req, res) => {
 });
 
 // 2. [通用/司機/後台登入 API] (POST /api/auth/login) - 公開
-// 💡 支援 MongoDB 與 Google 試算表 (Accounts 分頁) 雙重驗證，並依角色返回建議的導向路徑
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -76,19 +75,16 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // ---------------------------------------------------------
-    // 步驟 A: 優先驗證 MongoDB 資料庫
+    // 步驟 A: 優先驗證 MongoDB 資料庫（移除了 readyState 阻擋）
     // ---------------------------------------------------------
     let user = null;
-    let isMongoUser = false;
-
-    if (mongoose.connection.readyState === 1) {
-      user = await User.findOne({ username });
-      if (user) {
-        isMongoUser = true;
-      }
+    try {
+      user = await User.findOne({ username: username.trim() });
+    } catch (dbErr) {
+      console.error('MongoDB 查詢出錯:', dbErr);
     }
 
-    if (isMongoUser) {
+    if (user) {
       if (!user.isActive) {
         return res.status(403).json({ success: false, message: '此帳號已被停用，請聯繫管理者。' });
       }
@@ -98,14 +94,12 @@ app.post('/api/auth/login', async (req, res) => {
         return res.status(400).json({ success: false, message: '帳號或密碼錯誤！' });
       }
 
-      // 發放 JWT Token (包含 role)
       const token = jwt.sign(
         { userId: user._id, username: user.username, role: user.role, name: user.name },
         process.env.JWT_SECRET || 'smile_wms_secret_key_2026_safe',
         { expiresIn: '30d' }
       );
 
-      // 判斷跳轉目標頁面
       const isAdminRole = ['super_admin', 'admin', 'warehouse_manager'].includes(user.role);
       const redirectUrl = isAdminRole ? '/index.html' : '/scan.html';
 
@@ -118,7 +112,7 @@ app.post('/api/auth/login', async (req, res) => {
           id: user._id,
           username: user.username,
           name: user.name,
-          role: user.role // 👈 供前端判斷 role 權限
+          role: user.role
         }
       });
     }
@@ -159,7 +153,7 @@ app.post('/api/auth/login', async (req, res) => {
             id: gsData.username,
             username: gsData.username,
             name: gsData.name,
-            role: userRole // 👈 供前端判斷 role 權限
+            role: userRole
           }
         });
       } else {
@@ -177,7 +171,6 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // 2.1 [專用：後台管理員登入 API] (POST /api/auth/admin-login) - 公開
-// 💡 強制檢驗角色，非管理者拒絕登入，防範司機帳號登入後台
 app.post('/api/auth/admin-login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -186,9 +179,12 @@ app.post('/api/auth/admin-login', async (req, res) => {
       return res.status(400).json({ success: false, message: '請輸入管理員帳號與密碼！' });
     }
 
+    // 1. 優先從 MongoDB 查詢（移除了 readyState 阻擋）
     let user = null;
-    if (mongoose.connection.readyState === 1) {
-      user = await User.findOne({ username });
+    try {
+      user = await User.findOne({ username: username.trim() });
+    } catch (dbErr) {
+      console.error('MongoDB 查詢出錯:', dbErr);
     }
 
     if (user) {
@@ -196,7 +192,6 @@ app.post('/api/auth/admin-login', async (req, res) => {
         return res.status(403).json({ success: false, message: '此帳號已被停用。' });
       }
 
-      // 權限過濾：非管理員權限直接阻擋
       const isAdminRole = ['super_admin', 'admin', 'warehouse_manager'].includes(user.role);
       if (!isAdminRole) {
         return res.status(403).json({ success: false, message: '權限不足！此頁面僅限後台管理人員登入。' });
@@ -227,7 +222,7 @@ app.post('/api/auth/admin-login', async (req, res) => {
       });
     }
 
-    // 後備 Google 試算表驗證
+    // 2. 後備 Google 試算表驗證
     try {
       const gsResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, {
         method: 'POST',
@@ -269,7 +264,6 @@ app.post('/api/auth/admin-login', async (req, res) => {
 });
 
 // 🔒 3. [管理者新增帳號 API] (POST /api/auth/create-user)
-// 支援建立 driver, warehouse_manager, super_admin 角色
 app.post('/api/auth/create-user', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
   try {
     const { username, password, name, role } = req.body;
