@@ -24,7 +24,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ---------------------------------------------------------
 // Google 試算表 Web App URL (作為備用或主要帳號來源)
 // ---------------------------------------------------------
-const GOOGLE_SHEET_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyN7yQj_K6N9l1S9d2VPsNaYTaBO_6foPEmAvN660YySbk6fn3SK6fyanJyuA-BjaUH/exec';
+const GOOGLE_SHEET_WEB_APP_URL = process.env.GOOGLE_SHEET_WEB_APP_URL || 'https://script.google.com/macros/s/AKfycbyN7yQj_K6N9l1S9d2VPsNaYTaBO_6foPEmAvN660YySbk6fn3SK6fyanJyuA-BjaUH/exec';
 
 // ---------------------------------------------------------
 // 0. 連接 MongoDB 雲端資料庫
@@ -75,7 +75,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // ---------------------------------------------------------
-    // 步驟 A: 優先驗證 MongoDB 資料庫（移除了 readyState 阻擋）
+    // 步驟 A: 優先驗證 MongoDB 資料庫
     // ---------------------------------------------------------
     let user = null;
     try {
@@ -179,7 +179,6 @@ app.post('/api/auth/admin-login', async (req, res) => {
       return res.status(400).json({ success: false, message: '請輸入管理員帳號與密碼！' });
     }
 
-    // 1. 優先從 MongoDB 查詢（移除了 readyState 阻擋）
     let user = null;
     try {
       user = await User.findOne({ username: username.trim() });
@@ -222,7 +221,6 @@ app.post('/api/auth/admin-login', async (req, res) => {
       });
     }
 
-    // 2. 後備 Google 試算表驗證
     try {
       const gsResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, {
         method: 'POST',
@@ -362,7 +360,7 @@ app.put('/api/auth/toggle-status', authenticateToken, authorizeRoles('super_admi
 });
 
 // ---------------------------------------------------------
-// 舊有功能：Google 試算表與掃碼/分析 API (加上權限防護)
+// 舊有功能：Google 試算表與掃碼/分析 API (全相容強化版)
 // ---------------------------------------------------------
 
 app.get('/favicon.ico', (req, res) => {
@@ -371,6 +369,9 @@ app.get('/favicon.ico', (req, res) => {
   });
 });
 
+// ---------------------------------------------------------
+// 🛠️ 輔助函式：全相容日期與棧板資料解析
+// ---------------------------------------------------------
 function normalizeDateStr(dateInput) {
   if (!dateInput) return '';
   const str = String(dateInput).trim();
@@ -403,7 +404,7 @@ function parsePalletString(palletData) {
       return { name: match[1].trim(), count: parseInt(match[2], 10) };
     }
     return { name: item.trim(), count: 1 };
-  });
+  }).filter(item => item.name !== '');
 }
 
 // 🔒 1. 司機端提交 API (POST /api/scan) - 受保護
@@ -431,7 +432,7 @@ app.post('/api/scan', authenticateToken, async (req, res) => {
   }
 });
 
-// 🔒 2. 後台動態分析 API (GET /api/analytics) - 受保護 (僅限管理者/倉管)
+// 🔒 2. 後台動態分析 API (GET /api/analytics) - 受保護 (全相容強化版)
 app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
   try {
     const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
@@ -456,14 +457,20 @@ app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admi
 
     const todayStr = normalizeDateStr(new Date());
 
-    const records = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => ({
-      id: r.timestamp || Date.now() - index,
-      driver: r.driver || '未知司機',
-      barcode: r.barcode || '',
-      status: r.status || '',
-      pallets: parsePalletString(r.palletStr || r.pallets),
-      created_at: r.timestamp
-    }));
+    // 🌟 欄位全相容轉換：相容 palletStr, pallets, items 以及多種時間戳記 key
+    const records = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => {
+      const rawPallets = r.palletStr || r.pallets || r.items || '';
+      const rawTimestamp = r.timestamp || r.created_at || r.date || r.time || '';
+
+      return {
+        id: rawTimestamp || Date.now() - index,
+        driver: r.driver || '未知司機',
+        barcode: r.barcode || '',
+        status: r.status || '',
+        pallets: parsePalletString(rawPallets),
+        created_at: rawTimestamp
+      };
+    });
 
     const todayRecords = records.filter(r => normalizeDateStr(r.created_at) === todayStr);
 
@@ -478,7 +485,9 @@ app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admi
 
       (r.pallets || []).forEach(p => {
         const pName = p.name;
-        const pCount = p.count;
+        const pCount = Number(p.count) || 0;
+
+        if (!pName) return;
 
         if (!stockMap[pName]) stockMap[pName] = 0;
         if (isOut) {
@@ -514,14 +523,44 @@ app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admi
   }
 });
 
-// 🔒 3. 讀取所有歷史紀錄 API (GET /api/records) - 受保護 (僅限管理者/倉管)
+// 🔒 3. 讀取所有歷史紀錄 API (GET /api/records) - 受保護 (全相容強化版)
 app.get('/api/records', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
   try {
     const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
-    const rawRecords = await sheetResponse.json();
-    res.status(200).json(rawRecords);
+    const responseText = await sheetResponse.text();
+
+    if (responseText.trim().startsWith('<')) {
+      console.error('❌ [GAS 權限警告] 抓到的是 HTML 頁面而非 JSON！');
+      return res.status(200).json([]);
+    }
+
+    let rawRecords = [];
+    try {
+      rawRecords = JSON.parse(responseText);
+    } catch (e) {
+      console.error('❌ JSON 剖析失敗:', e);
+      return res.status(200).json([]);
+    }
+
+    // 🌟 全相容正規化轉換，確保傳回給前端表格時資料結構一致
+    const normalizedRecords = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => {
+      const rawPallets = r.palletStr || r.pallets || r.items || '';
+      const rawTimestamp = r.timestamp || r.created_at || r.date || r.time || '';
+
+      return {
+        timestamp: rawTimestamp,
+        driver: r.driver || '未知司機',
+        barcode: r.barcode || '',
+        status: r.status || '',
+        palletStr: typeof rawPallets === 'string' ? rawPallets : JSON.stringify(rawPallets),
+        pallets: parsePalletString(rawPallets)
+      };
+    });
+
+    res.status(200).json(normalizedRecords);
   } catch (error) {
-    res.status(500).json({ error: '讀取失敗' });
+    console.error('讀取歷史紀錄失敗:', error);
+    res.status(500).json({ error: '讀取歷史紀錄失敗' });
   }
 });
 
