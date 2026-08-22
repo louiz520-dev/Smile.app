@@ -370,8 +370,26 @@ app.get('/favicon.ico', (req, res) => {
 });
 
 // ---------------------------------------------------------
-// 🛠️ 輔助函式：全相容日期與棧板資料解析
+// 🛠️ 輔助函式：全相容日期與棧板資料解析 (含強化版欄位自動對應)
 // ---------------------------------------------------------
+
+// 💡 強化版：跨大小寫與命名變體的欄位防錯讀取函式
+function getValueByKeys(recordObj, possibleKeys) {
+  if (!recordObj || typeof recordObj !== 'object') return '';
+  const recordKeys = Object.keys(recordObj);
+  
+  for (const targetKey of possibleKeys) {
+    const cleanTarget = targetKey.toLowerCase().replace(/[\s_]/g, '');
+    for (const key of recordKeys) {
+      const cleanKey = key.toLowerCase().replace(/[\s_]/g, '');
+      if (cleanKey === cleanTarget && recordObj[key] !== undefined && recordObj[key] !== null) {
+        return recordObj[key];
+      }
+    }
+  }
+  return '';
+}
+
 function normalizeDateStr(dateInput) {
   if (!dateInput) return '';
   const str = String(dateInput).trim();
@@ -444,7 +462,7 @@ app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admi
     const responseText = await sheetResponse.text();
 
     if (responseText.trim().startsWith('<')) {
-      console.error('❌ [GAS 權限警告] 抓到的是 HTML 頁面而非 JSON，請將 GAS 存取權限改為「任何人」！');
+      console.error('❌ [GAS 權限警告] 抓到的是 HTML 頁面而非 JSON，請將 GAS 存取權限改為「所有人」！');
       return res.status(200).json({
         todayRecords: [],
         dailyInMap: {},
@@ -460,17 +478,22 @@ app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admi
       console.error('❌ JSON 剖析失敗:', e);
     }
 
+    console.log('🔍 [/api/analytics] 從 GAS 取得的原生筆數:', Array.isArray(rawRecords) ? rawRecords.length : 0);
+
     const todayStr = normalizeDateStr(new Date());
 
     const records = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => {
-      const rawPallets = r.palletStr || r.pallets || r.items || '';
-      const rawTimestamp = r.timestamp || r.created_at || r.date || r.time || '';
+      const rawPallets = getValueByKeys(r, ['palletStr', 'pallets', 'items', 'pallet', '棧板', '棧板明細']);
+      const rawTimestamp = getValueByKeys(r, ['timestamp', 'created_at', 'date', 'time', '時間', '日期']);
+      const driver = getValueByKeys(r, ['driver', 'drivername', '司機', '司機姓名']);
+      const barcode = getValueByKeys(r, ['barcode', 'code', '條碼', '單號']);
+      const status = getValueByKeys(r, ['status', '狀態', '進出狀態']);
 
       return {
         id: rawTimestamp || Date.now() - index,
-        driver: r.driver || '未知司機',
-        barcode: r.barcode || '',
-        status: r.status || '',
+        driver: driver || '未知司機',
+        barcode: barcode || '',
+        status: status || '',
         pallets: parsePalletString(rawPallets),
         created_at: rawTimestamp
       };
@@ -485,7 +508,7 @@ app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admi
     records.forEach(r => {
       const recordDateStr = normalizeDateStr(r.created_at);
       const isToday = (recordDateStr === todayStr);
-      const isOut = r.status.includes('出倉') || r.status.includes('提貨') || r.status.includes('越庫');
+      const isOut = String(r.status).includes('出倉') || String(r.status).includes('提貨') || String(r.status).includes('越庫');
 
       (r.pallets || []).forEach(p => {
         const pName = p.name;
@@ -551,16 +574,21 @@ app.get('/api/records', authenticateToken, authorizeRoles('super_admin', 'admin'
       return res.status(200).json([]);
     }
 
+    console.log('🔍 [/api/records] 從 GAS 取得的原生筆數:', Array.isArray(rawRecords) ? rawRecords.length : 0);
+
     const normalizedRecords = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => {
-      const rawPallets = r.palletStr || r.pallets || r.items || '';
-      const rawTimestamp = r.timestamp || r.created_at || r.date || r.time || '';
+      const rawPallets = getValueByKeys(r, ['palletStr', 'pallets', 'items', 'pallet', '棧板', '棧板明細']);
+      const rawTimestamp = getValueByKeys(r, ['timestamp', 'created_at', 'date', 'time', '時間', '日期']);
+      const driver = getValueByKeys(r, ['driver', 'drivername', '司機', '司機姓名']);
+      const barcode = getValueByKeys(r, ['barcode', 'code', '條碼', '單號']);
+      const status = getValueByKeys(r, ['status', '狀態', '進出狀態']);
 
       return {
-        timestamp: rawTimestamp,
-        driver: r.driver || '未知司機',
-        barcode: r.barcode || '',
-        status: r.status || '',
-        palletStr: typeof rawPallets === 'string' ? rawPallets : JSON.stringify(rawPallets),
+        timestamp: rawTimestamp || '',
+        driver: driver || '未知司機',
+        barcode: barcode || '',
+        status: status || '',
+        palletStr: typeof rawPallets === 'string' ? rawPallets : JSON.stringify(rawPallets || ''),
         pallets: parsePalletString(rawPallets)
       };
     });
@@ -596,16 +624,21 @@ app.get('/api/history', authenticateToken, authorizeRoles('super_admin', 'admin'
       return res.status(200).json([]);
     }
 
+    console.log('🔍 [/api/history] 從 GAS 取得的原生筆數:', Array.isArray(rawRecords) ? rawRecords.length : 0);
+
     const normalizedRecords = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => {
-      const rawPallets = r.palletStr || r.pallets || r.items || '';
-      const rawTimestamp = r.timestamp || r.created_at || r.date || r.time || '';
+      const rawPallets = getValueByKeys(r, ['palletStr', 'pallets', 'items', 'pallet', '棧板', '棧板明細']);
+      const rawTimestamp = getValueByKeys(r, ['timestamp', 'created_at', 'date', 'time', '時間', '日期']);
+      const driver = getValueByKeys(r, ['driver', 'drivername', '司機', '司機姓名']);
+      const barcode = getValueByKeys(r, ['barcode', 'code', '條碼', '單號']);
+      const status = getValueByKeys(r, ['status', '狀態', '進出狀態']);
 
       return {
-        timestamp: rawTimestamp,
-        driver: r.driver || '未知司機',
-        barcode: r.barcode || '',
-        status: r.status || '',
-        palletStr: typeof rawPallets === 'string' ? rawPallets : JSON.stringify(rawPallets),
+        timestamp: rawTimestamp || '',
+        driver: driver || '未知司機',
+        barcode: barcode || '',
+        status: status || '',
+        palletStr: typeof rawPallets === 'string' ? rawPallets : JSON.stringify(rawPallets || ''),
         pallets: parsePalletString(rawPallets)
       };
     });
