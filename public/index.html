@@ -255,7 +255,7 @@
       <h1 style="margin:0; font-size: 18px;">🚚 倉儲管理儀表板</h1>
       <span id="user-role-badge" class="badge" style="display:none;">---</span>
       <a href="/scan.html" class="btn btn-gold" target="_blank">📱 前往司機端 ↗</a>
-      <a href="/history.html" class="btn btn-outline" target="_blank">📜 查看過往紀錄 ↗</a>
+      <button class="btn btn-outline" onclick="openHistoryPage()">📜 查看過往紀錄 ↗</button>
       <span class="status-info" id="last-updated">更新時間：載入中...</span>
     </div>
 
@@ -430,6 +430,16 @@
       window.location.href = '/admin-login.html';
     }
 
+    // 開啟歷史紀錄頁面 (帶入 Token 避免 401 錯誤)
+    function openHistoryPage() {
+      const token = localStorage.getItem('token');
+      if (token) {
+        window.open(`/history.html?token=${encodeURIComponent(token)}`, '_blank');
+      } else {
+        window.open('/history.html', '_blank');
+      }
+    }
+
     // 司機連結產生
     function getDriverUrl() {
       const name = document.getElementById('driver-input').value.trim() || '司機';
@@ -461,9 +471,9 @@
           headers: getAuthHeaders()
         });
 
-        // 若 Token 失效或過期
+        // 若 Token 失效或過期 (401/403)
         if (res.status === 401 || res.status === 403) {
-          alert('登入已過期或權限不足，請重新登入');
+          alert('登入狀態已失效，請重新登入！');
           logout();
           return;
         }
@@ -601,6 +611,12 @@
         const res = await fetch('/api/admin/users', {
           headers: getAuthHeaders()
         });
+
+        if (res.status === 401 || res.status === 403) {
+          logout();
+          return;
+        }
+
         if (!res.ok) return;
         const users = await res.json();
         
