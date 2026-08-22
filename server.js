@@ -432,8 +432,13 @@ app.post('/api/scan', authenticateToken, async (req, res) => {
   }
 });
 
-// 🔒 2. 後台動態分析 API (GET /api/analytics) - 受保護 (全相容強化版)
-app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
+// 🔒 2. 後台動態分析 API (GET /api/analytics) - 僅限最高管理者 (super_admin, admin)
+app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admin'), async (req, res) => {
+  // 💡 停用瀏覽器快取，避免出現 304 問題
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   try {
     const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
     const responseText = await sheetResponse.text();
@@ -457,7 +462,6 @@ app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admi
 
     const todayStr = normalizeDateStr(new Date());
 
-    // 🌟 欄位全相容轉換：相容 palletStr, pallets, items 以及多種時間戳記 key
     const records = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => {
       const rawPallets = r.palletStr || r.pallets || r.items || '';
       const rawTimestamp = r.timestamp || r.created_at || r.date || r.time || '';
@@ -523,8 +527,13 @@ app.get('/api/analytics', authenticateToken, authorizeRoles('super_admin', 'admi
   }
 });
 
-// 🔒 3. 讀取所有歷史紀錄 API (GET /api/records) - 受保護 (全相容強化版)
-app.get('/api/records', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
+// 🔒 3. 讀取所有歷史紀錄 API (GET /api/records) - 僅限最高管理者 (super_admin, admin)
+app.get('/api/records', authenticateToken, authorizeRoles('super_admin', 'admin'), async (req, res) => {
+  // 💡 停用瀏覽器快取，避免出現 304 問題
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   try {
     const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
     const responseText = await sheetResponse.text();
@@ -542,7 +551,6 @@ app.get('/api/records', authenticateToken, authorizeRoles('super_admin', 'admin'
       return res.status(200).json([]);
     }
 
-    // 🌟 全相容正規化轉換，確保傳回給前端表格時資料結構一致
     const normalizedRecords = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => {
       const rawPallets = r.palletStr || r.pallets || r.items || '';
       const rawTimestamp = r.timestamp || r.created_at || r.date || r.time || '';
@@ -564,8 +572,13 @@ app.get('/api/records', authenticateToken, authorizeRoles('super_admin', 'admin'
   }
 });
 
-// 🔒 4. [新增] 提供 history.html 專用的歷史紀錄 API (GET /api/history) - 受保護
-app.get('/api/history', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
+// 🔒 4. 提供 history.html 專用的歷史紀錄 API (GET /api/history) - 僅限最高管理者 (super_admin, admin)
+app.get('/api/history', authenticateToken, authorizeRoles('super_admin', 'admin'), async (req, res) => {
+  // 💡 停用瀏覽器快取，避免出現 304 問題
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   try {
     const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
     const responseText = await sheetResponse.text();
