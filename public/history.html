@@ -155,7 +155,7 @@
       <div class="btn-group">
         <!-- ⬇️ 匯出 CSV 按鈕 ⬇️ -->
         <button onclick="exportToCSV()" class="btn btn-green">📥 匯出 CSV 報表</button>
-        <button onclick="fetchHistory()" class="btn btn-outline">🔄 重新整理</button>
+        <button onclick="fetchHistoryData()" class="btn btn-outline">🔄 重新整理</button>
         <button onclick="window.close()" class="btn btn-gold">✕ 關閉分頁</button>
       </div>
     </div>
@@ -187,12 +187,59 @@
     let allRecords = [];
     let displayedRecords = []; // 紀錄目前畫面上過濾後的資料
 
-    async function fetchHistory() {
+    // 從 網址列(URL) 或 localStorage 取得 JWT Token
+    function getToken() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tokenFromUrl = urlParams.get('token');
+      if (tokenFromUrl) {
+        // 若網址列有 Token，順便存入 localStorage 供後續使用
+        localStorage.setItem('token', tokenFromUrl);
+        return tokenFromUrl;
+      }
+      return localStorage.getItem('token');
+    }
+
+    // 抓取過往歷史紀錄的函數
+    async function fetchHistoryData() {
+      const token = getToken();
       const tbody = document.getElementById('history-table');
+
+      // 若完全沒有 Token，引導使用者重新登入
+      if (!token) {
+        alert('未偵測到登入憑證，請重新登入！');
+        window.location.href = '/admin-login.html';
+        return;
+      }
+
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted); padding: 30px;">載入試算表歷史紀錄中...</td></tr>';
 
       try {
-        const res = await fetch('/api/records');
+        // 先嘗試從 /api/history 抓取，若不符合可自動退回相容 /api/records
+        let res = await fetch('/api/history', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (res.status === 404) {
+          res = await fetch('/api/records', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+        }
+
+        if (res.status === 401 || res.status === 403) {
+          alert('登入憑證已過期，請重新登入！');
+          localStorage.removeItem('token');
+          window.location.href = '/admin-login.html';
+          return;
+        }
+
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
@@ -208,7 +255,8 @@
         renderTable(displayedRecords);
 
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--danger-color); padding: 30px;">⚠️ 讀取歷史資料失敗，請確認網路連線。</td></tr>';
+        console.error("載入歷史紀錄失敗:", err);
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--danger-color); padding: 30px;">⚠️ 讀取歷史資料失敗，請確認網路連線或 API 狀態。</td></tr>';
       }
     }
 
@@ -223,15 +271,16 @@
         const statusStr = r.status || '';
         const isOut = statusStr.includes('出倉') || statusStr.includes('提貨') || statusStr.includes('越庫');
         const statusClass = isOut ? 'status-out' : 'status-in';
+        const palletInfo = r.palletStr || (Array.isArray(r.pallets) ? JSON.stringify(r.pallets) : r.pallets) || '-';
 
         return `
           <tr>
             <td style="color: var(--text-muted);">${i + 1}</td>
-            <td><small>${r.timestamp || '-'}</small></td>
+            <td><small>${r.timestamp || r.created_at || '-'}</small></td>
             <td><strong>${r.driver || '未知'}</strong></td>
             <td><code>${r.barcode || '-'}</code></td>
             <td class="${statusClass}">${statusStr || '未指定'}</td>
-            <td><span class="badge">${r.palletStr || r.pallets || '-'}</span></td>
+            <td><span class="badge">${palletInfo}</span></td>
           </tr>
         `;
       }).join('');
@@ -243,10 +292,11 @@
         displayedRecords = [...allRecords];
       } else {
         displayedRecords = allRecords.filter(r => {
+          const palletInfo = r.palletStr || (Array.isArray(r.pallets) ? JSON.stringify(r.pallets) : r.pallets) || '';
           return (r.driver || '').toLowerCase().includes(q) ||
                  (r.barcode || '').toLowerCase().includes(q) ||
                  (r.status || '').toLowerCase().includes(q) ||
-                 (r.palletStr || '').toLowerCase().includes(q);
+                 palletInfo.toLowerCase().includes(q);
         });
       }
       renderTable(displayedRecords);
@@ -261,14 +311,18 @@
 
       // 建立 CSV 標頭與欄位
       const headers = ['編號', '時間', '司機', '單號/條碼', '動作狀態', '棧板明細'];
-      const rows = displayedRecords.map((r, index) => [
-        index + 1,
-        `"${(r.timestamp || '').replace(/"/g, '""')}"`,
-        `"${(r.driver || '').replace(/"/g, '""')}"`,
-        `"${(r.barcode || '').replace(/"/g, '""')}"`,
-        `"${(r.status || '').replace(/"/g, '""')}"`,
-        `"${(r.palletStr || r.pallets || '').replace(/"/g, '""')}"`
-      ]);
+      const rows = displayedRecords.map((r, index) => {
+        const timeStr = r.timestamp || r.created_at || '';
+        const palletInfo = r.palletStr || (Array.isArray(r.pallets) ? JSON.stringify(r.pallets) : r.pallets) || '';
+        return [
+          index + 1,
+          `"${timeStr.replace(/"/g, '""')}"`,
+          `"${(r.driver || '').replace(/"/g, '""')}"`,
+          `"${(r.barcode || '').replace(/"/g, '""')}"`,
+          `"${(r.status || '').replace(/"/g, '""')}"`,
+          `"${palletInfo.replace(/"/g, '""')}"`
+        ];
+      });
 
       // 組合 CSV 字串
       let csvContent = headers.join(',') + '\n' + rows.map(row => row.join(',')).join('\n');
@@ -287,7 +341,8 @@
       document.body.removeChild(link);
     }
 
-    fetchHistory();
+    // 頁面載入後自動執行抓取
+    window.addEventListener('DOMContentLoaded', fetchHistoryData);
   </script>
 </body>
 </html>
