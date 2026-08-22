@@ -564,6 +564,46 @@ app.get('/api/records', authenticateToken, authorizeRoles('super_admin', 'admin'
   }
 });
 
+// 🔒 4. [新增] 提供 history.html 專用的歷史紀錄 API (GET /api/history) - 受保護
+app.get('/api/history', authenticateToken, authorizeRoles('super_admin', 'admin', 'warehouse_manager'), async (req, res) => {
+  try {
+    const sheetResponse = await fetch(GOOGLE_SHEET_WEB_APP_URL, { redirect: 'follow' });
+    const responseText = await sheetResponse.text();
+
+    if (responseText.trim().startsWith('<')) {
+      console.error('❌ [GAS 權限警告] 抓到的是 HTML 頁面而非 JSON！');
+      return res.status(200).json([]);
+    }
+
+    let rawRecords = [];
+    try {
+      rawRecords = JSON.parse(responseText);
+    } catch (e) {
+      console.error('❌ JSON 剖析失敗:', e);
+      return res.status(200).json([]);
+    }
+
+    const normalizedRecords = (Array.isArray(rawRecords) ? rawRecords : []).map((r, index) => {
+      const rawPallets = r.palletStr || r.pallets || r.items || '';
+      const rawTimestamp = r.timestamp || r.created_at || r.date || r.time || '';
+
+      return {
+        timestamp: rawTimestamp,
+        driver: r.driver || '未知司機',
+        barcode: r.barcode || '',
+        status: r.status || '',
+        palletStr: typeof rawPallets === 'string' ? rawPallets : JSON.stringify(rawPallets),
+        pallets: parsePalletString(rawPallets)
+      };
+    });
+
+    res.status(200).json(normalizedRecords);
+  } catch (error) {
+    console.error('讀取歷史紀錄失敗:', error);
+    res.status(500).json({ error: '讀取歷史紀錄失敗' });
+  }
+});
+
 // 匯出 Express app 供 api/index.js (Vercel Serverless Function) 呼叫
 module.exports = app;
 
